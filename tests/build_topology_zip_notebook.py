@@ -29,10 +29,9 @@ AAF 전체 재현(적대적 반경 학습)은 아닙니다. 사용자 체크포�
 LEARNING_RATE=1e-4로 먼저 비교하세요. 결과는 새 폴더에 저장하고 원본 best.pt는 수정하지 않습니다.
 
 데이터: 공유 Drive의 `2026 자율연구/HSQM/dataset/automated_train_dataset` 안
-아래와 같은 폴더별 TAR 묶음과 CSV를 사용합니다. 각 TAR은 독립 압축 파일입니다.
+아래와 같은 폴더별 TAR 묶음을 사용합니다. 각 TAR은 독립 압축 파일입니다.
 ```
 automated_train_dataset/
-  path (1).csv
   input_stroke/  # 폴더와 하위 폴더의 압축 파일 전체
   input/
   target_stroke/
@@ -40,7 +39,8 @@ automated_train_dataset/
 ```
 파일명·번호·개수를 제한하지 않고 하위 폴더까지 TAR/ZIP을 전부 찾습니다.
 TAR.GZ/TGZ/TAR.BZ2/TAR.XZ도 지원합니다. 기존 네 ZIP 형식도 지원합니다.
-`path (1).csv`가 있으면 우선 사용하고, 없으면 `path.csv`/`paths.csv`를 검색합니다.
+`INDEX_MODE='filenames'`를 선택하면 PNG 파일명에서 학습 목록을 만들고 획 번호를 검사합니다.
+기본 `INDEX_MODE='csv'`는 `path (1).csv`를 우선 사용하고, 없으면 `path.csv`/`paths.csv`를 검색합니다.
 입력=input, 기준=target, 정답=input_stroke, 기준 획=target_stroke입니다.
 얇은 정답은 기존 V2처럼 주석된 픽셀만 CE/Dice로 감독합니다. 그 밖의 원본 잉크를 배경으로 벌주지 않습니다.
 실제 정답 획 마스크는 정션 감독과 선택적 약한 영역 주석 생성에 사용합니다. CSV는 완전한 실제 획 경로를 제공한다고 가정합니다.
@@ -76,19 +76,20 @@ from stroke_model.train_reference import read_manifest
 from stroke_model.annotation_data import ActualStrokeDataset
 import matplotlib.pyplot as plt
 DATA_ROOT = '/content/drive/Shareddrives/2026 자율연구/HSQM/dataset/automated_train_dataset'
-CSV_PATH = None  # 직접 지정 가능. 기본은 path (1).csv 우선, 그다음 path.csv/paths.csv.
+INDEX_MODE = 'csv'  # 'filenames': PNG 파일명으로 자동 짝짓기. 'csv': 기존 목록 사용.
+CSV_PATH = None  # csv 모드에서만 지정. 기본은 path (1).csv, 그다음 path.csv/paths.csv.
 IMAGE_SIZE = 128
 SEED = 42
 data_root = existing_path(DATA_ROOT)
-if CSV_PATH is None:
+if INDEX_MODE == 'csv' and CSV_PATH is None:
     try:
         CSV_PATH = existing_path(data_root/'path (1).csv')
     except FileNotFoundError:
         pass
 manifest = prepare_stroke_zips(data_root, csv_path=CSV_PATH, size=IMAGE_SIZE, seed=SEED,
-                               independent=True)
+                               independent=True, index_mode=INDEX_MODE)
 report = json.loads((manifest.parent/'conversion_report.json').read_text(encoding='utf-8'))
-print('선택 CSV:', report['csv'], '\\n컬럼:', report['columns'])
+print('학습 목록 방식:', INDEX_MODE, '\\n저장된 목록:', manifest.parent/'selected_paths.csv')
 print(report['label_policy'], '\\n검증 분리:', report['split_note'])
 print('빈 기준 획으로 제외:', report['skipped_count'], '개 / 목록:', manifest.parent/'skipped_samples.csv')
 rows = read_manifest(manifest)

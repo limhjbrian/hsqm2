@@ -1,4 +1,4 @@
-"""Stage the four stroke archives locally; use CSV for semantic correspondence."""
+"""Stage stroke archives and prepare training data from CSV or numbered PNGs."""
 import hashlib
 import json
 import shutil
@@ -11,8 +11,13 @@ from pathlib import Path, PurePosixPath
 from tqdm.auto import tqdm
 
 from .convert_reference_csv import convert_csv, existing_path
+from .stroke_filename_index import build_filename_csv
 
 ARCHIVES = ('input_stroke.zip', 'input.zip', 'target_stroke.zip', 'target.zip')
+
+
+def _archive_id(relative_path):
+    return hashlib.sha256(relative_path.as_posix().encode()).hexdigest()[:16]
 
 
 def discover_archives(source, roles=ARCHIVES):
@@ -67,12 +72,17 @@ def extract_checked(archive, destination):
         return
     with zipfile.ZipFile(archive) as z:
         members = z.infolist()
+        seen_files = set()
         for member in members:
             path = PurePosixPath(member.filename.replace('\\', '/'))
             if (path.is_absolute() or '..' in path.parts or
                     any(':' in part for part in path.parts) or
                     stat.S_ISLNK(member.external_attr >> 16)):
                 raise ValueError(f'Unsafe ZIP member: {member.filename}')
+            if not member.is_dir():
+                if path in seen_files:
+                    raise ValueError(f'{Path(archive).name}: 중복 ZIP 파일 경로: {path}')
+                seen_files.add(path)
         needed = sum(m.file_size for m in members)
         if needed > shutil.disk_usage(destination.parent).free:
             raise OSError(f'로컬 디스크 부족: 압축 해제에 {needed / 2**30:.1f} GiB 필요')
@@ -110,7 +120,7 @@ def stage_stroke_archives(source, local_root='/content/hsqm_stroke_zip', roles=N
         if path not in allowed:
             continue
         # Different folders may contain archives with identical filenames.
-        archive_id = hashlib.sha256(path.relative_to(source).as_posix().encode()).hexdigest()[:16]
+        archive_id = _archive_id(path.relative_to(source))
         destination = raw / archive_id
         if (destination / '.complete.json').is_file():
             print('로컬 압축 데이터 재사용:', path.name, flush=True)
@@ -140,21 +150,36 @@ def stage_stroke_archives(source, local_root='/content/hsqm_stroke_zip', roles=N
 
 
 def prepare_stroke_zips(source, local_root='/content/hsqm_stroke_zip', csv_path=None, size=128, seed=42,
-                        independent=False):
+                        independent=False, index_mode='csv'):
+    if index_mode not in ('csv', 'filenames'):
+        raise ValueError('index_mode는 csv 또는 filenames여야 합니다.')
+    if index_mode == 'filenames' and csv_path is not None:
+        raise ValueError('CSV_PATH를 지정하려면 index_mode="csv"를 사용하세요.')
     source = existing_path(source)
     cache, raw, signature = stage_stroke_archives(source, local_root)
-    selected = find_csv(source, raw, csv_path)
-    content = selected.read_bytes()
+    archive_paths = [Path(path).relative_to(source) for path, _, _ in signature]
+    if index_mode == 'filenames':
+        files_by_role = {Path(archive).stem: [] for archive in ARCHIVES}
+        for relative in archive_paths:
+            role = relative.parts[0] if len(relative.parts) > 1 else relative.stem
+            files_by_role[role].extend(p for p in (raw / _archive_id(relative)).rglob('*')
+                                       if p.is_file() and 'input_stroke_ga' not in p.relative_to(raw).parts)
+        content = build_filename_csv(files_by_role, raw)
+        selected = '파일명 자동 생성'
+    else:
+        selected = find_csv(source, raw, csv_path)
+        content = selected.read_bytes()
     conversion_key = hashlib.sha256(content + f'converter3:{size}:{seed}:{independent}'.encode()).hexdigest()[:16]
     prepared = cache / ('prepared_' + conversion_key)
     manifest = prepared / 'manifest.json'
     if (prepared / '.complete.json').is_file() and manifest.is_file():
         print('로컬 변환 데이터 재사용:', manifest, flush=True)
         return manifest
-    print('CSV 선택:', selected, flush=True)
-    local_csv = cache / 'selected_paths.csv'
+    print('학습 인덱스:', selected, flush=True)
+    conversion_dir = Path(tempfile.mkdtemp(prefix='conversion_', dir=cache))
+    local_csv = conversion_dir / 'selected_paths.csv'
     local_csv.write_bytes(content)
-    temporary = Path(tempfile.mkdtemp(prefix='conversion_', dir=cache)) / 'prepared'
+    temporary = conversion_dir / 'prepared'
     manifest = convert_csv(local_csv, temporary, size=size, seed=seed, dataset_root=raw, local_only=True,
                            independent=independent)
     # Keep converter absolute NPZ paths stable: use the completed temp directory directly.
@@ -164,5 +189,9 @@ def prepare_stroke_zips(source, local_root='/content/hsqm_stroke_zip', csv_path=
     shutil.copyfile(temporary / 'conversion_report.json', prepared / 'conversion_report.json')
     shutil.copyfile(temporary / 'skipped_samples.csv', prepared / 'skipped_samples.csv')
     (prepared / 'selected_paths.csv').write_bytes(content)
-    (prepared / '.complete.json').write_text(json.dumps({'csv_source': str(selected), 'archives': signature}), encoding='utf-8')
+    (prepared / '.complete.json').write_text(json.dumps({
+        'csv_source': str(selected), 'archives': signature, 'index_mode': index_mode,
+        'independent': independent,
+        'archive_relative_paths': [path.as_posix() for path in archive_paths],
+    }, ensure_ascii=False), encoding='utf-8')
     return prepared / 'manifest.json'

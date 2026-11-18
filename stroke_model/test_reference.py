@@ -131,18 +131,28 @@ def run_manifest(checkpoint, manifest, split='val', preview_count=5, csv_path=No
 
 def run_zip_validation(checkpoint, dataset_root, preview_count=5):
     """Rebuild the training split from its saved CSV, archive identity and seed."""
-    from .prepare_stroke_zips import ARCHIVES, prepare_stroke_zips
+    from .prepare_stroke_zips import discover_archives, prepare_stroke_zips
     checkpoint = existing_path(checkpoint)
     run = checkpoint.parent
     config = json.loads((run / 'run_config.json').read_text(encoding='utf-8'))
     saved = json.loads((run / 'complete.json').read_text(encoding='utf-8'))
     source = existing_path(dataset_root)
-    old = {Path(path).name: (size, modified) for path, size, modified in saved['archives']}
-    for name in ARCHIVES:
-        path = existing_path(source / name)
-        if (path.stat().st_size, path.stat().st_mtime_ns) != old.get(name):
-            raise ValueError(f'학습 당시와 다른 ZIP입니다: {name}. 같은 데이터의 val 분할을 복원할 수 없습니다.')
+    archive_paths = discover_archives(source)
+    saved_names = saved.get('archive_relative_paths')
+    if saved_names is None:
+        # Older ZIP runs only matched archive basenames.
+        saved_names = [Path(path).name for path, _, _ in saved['archives']]
+        names = [path.name for path in archive_paths]
+    else:
+        names = [path.relative_to(source).as_posix() for path in archive_paths]
+    old = {name: (size, modified) for name, (_, size, modified) in
+           zip(saved_names, saved['archives'], strict=True)}
+    current = {name: (path.stat().st_size, path.stat().st_mtime_ns)
+               for name, path in zip(names, archive_paths)}
+    if len(old) != len(saved_names) or len(current) != len(names) or current != old:
+        raise ValueError('학습 당시와 다른 압축 파일 목록입니다. 같은 데이터의 val 분할을 복원할 수 없습니다.')
     manifest = prepare_stroke_zips(source, csv_path=run / 'selected_paths.csv',
-                                   size=config['image_size'], seed=config['seed'])
+                                   size=config['image_size'], seed=config['seed'],
+                                   independent=saved.get('independent', False))
     return run_manifest(checkpoint, manifest, split='val', preview_count=preview_count,
                         csv_path=run / 'selected_paths.csv')

@@ -6,11 +6,35 @@
 역할별 TAR이 없을 때 기존 `역할.zip`으로 대체한다. Topo 모델 학습은
 `notebooks/training/train_topology_zips.ipynb`를 사용하며 실제 입력 획의 공유 교차점을 보존한다.
 
+## CSV 없이 학습 목록 만들기
+
+이미지와 획의 생성 코드는 [InkSight 생성 노트북](../../notebooks/data/inksight_automation.ipynb)에서 관리한다.
+Topo 또는 V2 ZIP 학습 Colab의 **데이터 준비 셀**에서 `INDEX_MODE = 'filenames'`,
+`CSV_PATH = None`으로 설정한다. 이후 네 역할의 압축 파일을 추가하고 준비 셀을 다시 실행하면 된다.
+예를 들어 입력 변형이 `I_Font_가_12.png`이면 다음 파일들이 짝을 이룬다.
+
+| 압축 파일 역할 | PNG 이름 예시 |
+|---|---|
+| `input` | `I_Font_가_12.png` |
+| `target` | `Font_가.png` |
+| `input_stroke` | `I_Font_가_12_1.png`, `I_Font_가_12_2.png`, … |
+| `target_stroke` | `Font_가_1.png`, `Font_가_2.png`, … |
+
+같은 획 번호끼리 연결하며 기준 획 번호는 1부터 연속이어야 한다. 동명 PNG, 기준 이미지 누락,
+전체 이미지 없이 남은 획 묶음, 기준과 정답의 획 번호 불일치는 준비 단계에서 오류로 표시한다.
+InkSight의 결합 획 미리보기인 `*_c.png`는 획 목록에서 제외한다.
+누락 획을 감독하려면 해당 번호의 빈 정답 마스크 파일을 유지한다. 파일의 번호나 픽셀 내용 자체를
+잘못 내보낸 경우에는 이름 검사만으로 구분할 수 없으므로 준비 셀의 획 미리보기도 확인한다.
+
+사용한 목록은 `selected_paths.csv`로 자동 저장된다. 별도 이름 규칙이나 `writer_id`/`group_id`가
+들어간 기존 목록을 사용하려면 `INDEX_MODE = 'csv'`를 선택한다. 이 방식이 기존 노트북의 기본값이다.
+학습에서 파일명 모드를 사용할 때는 생성 노트북의 CSV 작성 셀을 건너뛰어도 된다.
+
 ## 기존 평가 노트북 재사용
 
 `notebooks/evaluation/test_reference_v2.ipynb`의 기본 MODE="zip_val"은 최신 stroke_zip_runs/*/best.pt를 선택한다.
 checkpoint에 경로를 지정하면 특정 실행을 평가한다. 학습 당시 저장한 selected_paths.csv와 run_config의 seed/크기로
-로컬 데이터를 복원하고 val만 평가한다. 학습 당시 ZIP 크기/수정 시각과 다르면 복원을 중단한다.
+로컬 데이터를 복원하고 val만 평가한다. 새 실행에서는 압축 파일의 상대 경로, 크기, 수정 시각을 확인한다.
 기존 evaluate/preview_reference를 그대로 사용하여 val Dice, 정답 커버리지, exclusive 예측, 획별 확률/soft mask/entropy를 저장한다.
 결과는 checkpoint 옆 val_results_시간에 저장한다. 이는 모델 선택에 사용한 validation이며 독립 test 평가가 아니다.
 MODE="test_csv"는 기존 별도 test CSV 전체 평가를 유지한다.
@@ -26,12 +50,12 @@ optimizer/epoch 복원은 하지 않는다. 자모 모델 가중치가 획 분�
 
 기본 폴더는 `/content/drive/Shareddrives/2026 자율연구/HSQM/dataset/automated_train_dataset`.
 input_stroke.zip, input.zip, target_stroke.zip, target.zip을 런타임 로컬로 한 번 복사하고 해제한다.
-CSV는 데이터 폴더 바로 아래의 path.csv/paths.csv를 우선 검색하고, 없으면 해제된 ZIP 내부를 찾는다.
+CSV 모드는 데이터 폴더 바로 아래의 path.csv/paths.csv를 우선 검색하고, 없으면 해제된 ZIP 내부를 찾는다.
 여러 후보면 중단하며 CSV_PATH로 선택한다. CSV가 나중에 올라오면 준비 셀만 재실행한다.
 데이터 폴더 밖의 이전 train/test CSV는 검색하지 않는다.
 
 CSV의 입력은 input, 기준 글자는 target, 기준 획은 target_stroke, 정답 획은 input_stroke에 해당하는 기존 CSV 규약을 사용한다.
-실제 컬럼 별칭은 convert_reference_csv.py에 정의되어 있다. 네 ZIP만으로 획 순서/의미 대응을 추측하지 않는다.
+실제 컬럼 별칭은 convert_reference_csv.py에 정의되어 있다.
 기준/정답 획 목록은 같은 순서여야 하며, preview와 선택된 컬럼을 학습 전에 확인한다.
 CSV의 오래된 Drive 절대 경로는 로컬 파일 경로의 접미사로 대응한다. 모호한 동명 파일은 중단한다.
 로컬 전용 Resolver를 사용하므로 CSV의 원래 Drive 이미지가 남아 있어도 개별 파일을 Drive에서 읽지 않는다.

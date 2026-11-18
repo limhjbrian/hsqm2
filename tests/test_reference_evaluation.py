@@ -74,6 +74,34 @@ class TestEvaluationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     run_zip_validation(checkpoint, root)
 
+    def test_archive_validation_restores_auto_index_from_nested_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            checkpoint = root / 'best.pt'
+            checkpoint.touch()
+            (root / 'run_config.json').write_text(json.dumps({'seed': 42, 'image_size': 32}))
+            filenames = [f'{role}/part/batch.tar' for role in
+                         ('input', 'input_stroke', 'target', 'target_stroke')]
+            saved = []
+            for name in filenames:
+                path = root / name
+                path.parent.mkdir(parents=True)
+                path.write_bytes(b'archive')
+                saved.append([str(path), path.stat().st_size, path.stat().st_mtime_ns])
+            (root / 'complete.json').write_text(json.dumps({
+                'archives': saved, 'archive_relative_paths': filenames,
+                'index_mode': 'filenames', 'independent': True,
+            }))
+            with patch('stroke_model.prepare_stroke_zips.prepare_stroke_zips',
+                       return_value=root / 'manifest.json') as prepare, \
+                 patch('stroke_model.test_reference.run_manifest', return_value={'ok': True}):
+                self.assertEqual(run_zip_validation(checkpoint, root), {'ok': True})
+                self.assertEqual(prepare.call_args.kwargs['csv_path'], root / 'selected_paths.csv')
+                self.assertTrue(prepare.call_args.kwargs['independent'])
+                (root / filenames[0]).rename(root / 'input/part/renamed.tar')
+                with self.assertRaisesRegex(ValueError, '다른 압축 파일'):
+                    run_zip_validation(checkpoint, root)
+
     def test_evaluation_uses_all_test_rows_and_reuses_conversion(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
