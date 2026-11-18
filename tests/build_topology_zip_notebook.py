@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
+def main(overlap=False):
     cells = []
 
     def add(kind, source):
@@ -16,7 +16,7 @@ def main():
             cell.update(execution_count=None, outputs=[])
         cells.append(cell)
 
-    add('markdown', '''# Topo 모델 학습 — 기존 V2 + 정션·방향 관계 보조 손실
+    legacy_intro = '''# Topo 모델 학습 — 기존 V2 + 정션·방향 관계 보조 손실
 GPU 런타임에서 위부터 실행하세요. 입력 글자의 실제 획 정답으로 학습합니다.
 기존 V2의 동결 Swin-T/FPN + 국소 flow + 공유 추출 헤드 + softmax를 그대로 사용합니다.
 전역 affine/ConvLSTM/독립 sigmoid는 사용하지 않습니다. 모든 soft 획의 합은 원본 잉크와 같습니다.
@@ -52,7 +52,18 @@ TAR.GZ/TGZ/TAR.BZ2/TAR.XZ도 지원합니다. 기존 네 ZIP 형식도 지원합
 
 기본은 ImageNet Swin 사전학습에서 새 학습입니다. 기존 V2 `best.pt`를 지정하면
 전체 V2를 초기화합니다(optimizer/epoch 복원 아님). 정션 성능 개선과 GPU 속도는 아직 검증 전입니다.
-''')
+'''
+    add('markdown', '''# 교차점_중복_허용
+
+기존 Topo의 Swin-T/FPN, 기준 획 힌트, 학습 설정과 정션·방향 보조 손실을 사용합니다.
+획별 sigmoid로 바꿔 한 픽셀이 두 획에 동시에 속할 수 있습니다.
+InkSight 생성 노트북의 학습용 `automated_train_dataset/npz/samples-*.tar`를 기본으로 읽습니다.
+NPZ 정답에 표시된 겹침만 공유 정답으로 쓰며, 주석이 없는 잉크는 기본 손실에서 제외합니다.
+
+GPU 런타임에서 위부터 실행하세요. 기존 Topo와 비교하려면 같은 NPZ, seed, 초기 체크포인트를 사용하세요.
+정션·방향·영역 보조 설정은 아래 학습 셀에 있습니다. 출력은 `v2_topology_overlap_runs`에 저장합니다.
+마지막 셀은 주석 Dice, 공유 픽셀 복원율, 단일 획에 생긴 불필요한 중복률과 예측 그림을 표시합니다.
+''' if overlap else legacy_intro)
     add('code', '''from pathlib import Path
 import json, subprocess, sys, tempfile
 root = Path(tempfile.mkdtemp(prefix='hsqm_topology_', dir='/content'))
@@ -69,7 +80,7 @@ if not torch.cuda.is_available():
     raise RuntimeError('런타임 유형을 GPU로 변경한 뒤 다시 실행하세요.')
 print('GPU:', torch.cuda.get_device_name(), '\\n코드 버전:', commit)
 ''')
-    add('code', '''from google.colab import drive
+    data_cell = '''from google.colab import drive
 drive.mount('/content/drive')
 from stroke_model.prepare_stroke_zips import prepare_stroke_zips
 from stroke_model.convert_reference_csv import existing_path
@@ -110,8 +121,17 @@ for index in range(min(3, len(dataset))):
         axes[1,s+1].imshow(strokes[s], cmap='gray', vmin=0, vmax=1); axes[1,s+1].set_title(f'Ref stroke {s+1}')
     axes[0,-1].imshow(target.sum(0), vmin=0, vmax=max(2,k)); axes[0,-1].set_title('GT overlap count')
     plt.tight_layout(); plt.show()
-''')
-    add('code', '''# 2번 셀의 획 순서와 실제 정답을 확인한 뒤 실행하세요.
+'''
+    if overlap:
+        data_cell += '''for split in ('train', 'val'):
+    shared = sum(entry['overlap_pixels'] for row, entry in zip(rows, report['rows'], strict=True)
+                 if row['split'] == split)
+    print(split, '겹침 주석 픽셀:', shared)
+    if not shared:
+        print('이 분할에는 명시적인 공유 정답이 없습니다.')
+'''
+    add('code', data_cell)
+    training_cell = '''# 2번 셀의 획 순서와 실제 정답을 확인한 뒤 실행하세요.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import shutil
@@ -192,8 +212,58 @@ with (output/'training.log').open('w', encoding='utf-8') as log:
 if returncode:
     raise subprocess.CalledProcessError(returncode, cmd)
 print('학습 완료:', output/'best.pt')
+'''
+    if overlap:
+        training_cell = training_cell.replace("/'v2_topology_runs'/", "/'v2_topology_overlap_runs'/")
+        training_cell = training_cell.replace("if local_checkpoint:\n", "cmd += ['--allow-overlap']\nif local_checkpoint:\n")
+        training_cell = training_cell.replace('기존 V2 + 정션 보조 손실 / 결과:', 'Topo + 획별 sigmoid / 결과:')
+        training_cell = training_cell.replace('모든 보조 가중치를 0으로 하면 기존 V2 기본 손실', '교차점 중복을 허용한 모델에도 정션 손실 적용')
+    add('code', training_cell)
+    if overlap:
+        add('code', '''# 선택된 best.pt의 검증용 주석 점수와 겹침 미리보기
+from stroke_model.infer_topology import load_topology, export_hard_masks
+from stroke_model.reference_v2_topology import TopologyDataset, collate_topology
+from stroke_model.train_reference import evaluate
+from torch.utils.data import DataLoader
+import numpy as np
+
+model, size, epoch = load_topology(output/'best.pt', 'cuda')
+val_items = [(row, entry['overlap_pixels']) for row, entry in zip(rows, report['rows'], strict=True)
+             if row['split'] == 'val']
+val_items.sort(key=lambda item: item[1], reverse=True)
+validation = TopologyDataset([row for row, _ in val_items], size, allow_overlap=True)
+loader = DataLoader(validation, batch_size=1, collate_fn=collate_topology)
+metrics = evaluate(model, loader, 'cuda', return_details=True)
+(output/'validation_metrics.json').write_text(json.dumps(metrics, indent=2), encoding='utf-8')
+print('Epoch:', epoch, metrics)
+for index in range(min(5, len(validation))):
+    image, reference, strokes, _, target, valid = validation[index]
+    with torch.inference_mode():
+        prediction = model(image[None].cuda(), reference[None].cuda(), strokes[None].cuda())
+    soft = prediction['masks'][0].cpu().numpy()
+    hard = export_hard_masks(image.numpy(), soft, output_mode=model.output_mode)
+    annotated = (target > .5) & (valid > .5) & (image > .5)
+    np.savez_compressed(output/f'val_{index:03d}.npz', image=image.numpy(), reference=reference.numpy(),
+                        reference_strokes=strokes.numpy(), target_masks=target.numpy(),
+                        valid_pixels=valid.numpy(), soft_masks=soft, hard_masks=hard,
+                        probabilities=prediction['probabilities'][0].cpu().numpy())
+    views = [(image[0], 'Input'), (annotated.sum(0), 'GT stroke count'),
+             (hard.sum(0), 'Predicted stroke count')]
+    fig, axes = plt.subplots(3, len(strokes)+1, figsize=(2*(len(strokes)+1), 6), squeeze=False)
+    for row_index, (view, title) in enumerate(views):
+        axes[row_index,0].imshow(view, cmap='gray', vmin=0, vmax=1 if row_index == 0 else max(2, len(strokes)))
+        axes[row_index,0].set_title(title)
+    for stroke in range(len(strokes)):
+        for row_index, (view, title) in enumerate(((annotated[stroke], 'Annotation'),
+                                                   (soft[stroke], 'Soft'), (hard[stroke], 'Hard'))):
+            axes[row_index,stroke+1].imshow(view, cmap='gray', vmin=0, vmax=1)
+            axes[row_index,stroke+1].set_title(f'{title} {stroke+1}')
+    for ax in axes.flat:
+        ax.axis('off')
+    fig.tight_layout(); fig.savefig(output/f'val_{index:03d}.png', dpi=120); plt.show(); plt.close(fig)
 ''')
-    add('code', '''# 학습에서 선택한 best.pt의 검증 예측. 독립 test 평가가 아닙니다.
+    else:
+        add('code', '''# 학습에서 선택한 best.pt의 검증 예측. 독립 test 평가가 아닙니다.
 from stroke_model.reference_model import ReferenceStrokeModel, exclusive_masks
 from stroke_model.train_reference import StrokeDataset, collate, evaluate
 from torch.utils.data import DataLoader
@@ -222,11 +292,13 @@ for index in range(min(5, len(validation))):
             axes[row_index,s+1].set_title(f'{title} {s+1}')
     plt.tight_layout(); fig.savefig(output/f'val_{index:03d}.png', dpi=120); plt.show()
 ''')
-    notebook = dict(cells=cells, metadata=dict(colab=dict(name='train_topology_zips.ipynb'),
+    name = '교차점_중복_허용.ipynb' if overlap else 'train_topology_zips.ipynb'
+    notebook = dict(cells=cells, metadata=dict(colab=dict(name=name),
         accelerator='GPU', kernelspec=dict(display_name='Python 3', language='python', name='python3')),
         nbformat=4, nbformat_minor=5)
-    (ROOT/'notebooks/training/train_topology_zips.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT/'notebooks/training'/name).write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
 if __name__ == '__main__':
     main()
+    main(overlap=True)

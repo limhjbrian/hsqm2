@@ -72,9 +72,10 @@ if CHECKPOINT is None:
     CHECKPOINT = candidates[-1]
 import torch
 from stroke_model.reference_v2_topology import ARCHITECTURE
+from stroke_model.reference_overlap import ARCHITECTURE as OVERLAP_ARCHITECTURE
 _state = torch.load(CHECKPOINT, map_location='cpu', weights_only=True)
-if _state.get('architecture') != ARCHITECTURE:
-    raise ValueError('새 V2+정션 모델 체크포인트를 지정하세요. 이전 독립 Topo/V2 파일은 이 노트북에서 받지 않습니다.')
+if _state.get('architecture') not in (ARCHITECTURE, OVERLAP_ARCHITECTURE):
+    raise ValueError('V2+정션 또는 교차점_중복_허용 학습의 best.pt를 지정하세요.')
 print('모델 구조:', _state['architecture'], '/ epoch:', _state.get('epoch'))
 del _state
 if CSV_PATH is None:

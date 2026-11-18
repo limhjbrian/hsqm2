@@ -69,6 +69,9 @@ def preview_reference(manifest, checkpoint=None, count=3, split='val', start=0, 
     if checkpoint is not None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state = torch.load(checkpoint, map_location=device, weights_only=True)
+        from .reference_overlap import ARCHITECTURE as OVERLAP_ARCHITECTURE
+        if state.get('architecture') == OVERLAP_ARCHITECTURE:
+            raise ValueError('겹침 체크포인트의 미리보기에는 교차점_중복_허용 노트북을 사용하세요.')
         size = state['image_size']
         model = ReferenceStrokeModel(image_size=state['image_size'], width=state['width'], pretrained=False).to(device)
         model.load_state_dict(state['model'])

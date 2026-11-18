@@ -41,11 +41,12 @@ class JunctionConfig:
 
 
 class TopologyDataset(Dataset):
-    """Original V2 sample plus ACTUAL masks, used only for auxiliary topology."""
-    def __init__(self, rows, size):
+    """Original V2 sample plus actual per-stroke masks and valid pixels."""
+    def __init__(self, rows, size, allow_overlap=False):
         from .train_reference import StrokeDataset
-        self.base = StrokeDataset(rows, size, include_topology=True)
+        self.base = StrokeDataset(rows, size, include_topology=True, allow_overlap=allow_overlap)
         self.rows = rows
+        self.allow_overlap = allow_overlap
 
     def __len__(self):
         return len(self.base)
@@ -58,6 +59,11 @@ class TopologyDataset(Dataset):
         for tensor in (target, valid):
             if not torch.isfinite(tensor).all() or (tensor < 0).any() or (tensor > 1).any():
                 raise ValueError('Actual topology masks must be finite in [0,1]')
+        if self.allow_overlap:
+            annotated = (target > .5) & (base[0] > .5) & (valid > .5)
+            active = base[2].flatten(1).sum(1) > 0
+            if not annotated.any() or (annotated & ~active[:, None, None]).any():
+                raise ValueError('Overlap supervision requires annotated ink and a reference for every annotated stroke')
         return base
 
 

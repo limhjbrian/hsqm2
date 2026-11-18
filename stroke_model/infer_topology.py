@@ -12,23 +12,26 @@ from tqdm.auto import tqdm
 from .convert_reference_csv import Resolver, existing_path
 from .infer_reference import inference_columns, load_inference_row, select_input_files
 from .reference_model import ReferenceStrokeModel
+from .reference_overlap import ARCHITECTURE as OVERLAP_ARCHITECTURE, OverlapStrokeModel
 from .reference_v2_topology import ARCHITECTURE
 from .global_alignment import predict_with_global_alignment, preview_global_alignment
 
 
 def load_topology(checkpoint, device):
     state = torch.load(existing_path(checkpoint), map_location='cpu', weights_only=True)
-    if state.get('architecture') not in ('reference_v2', ARCHITECTURE):
+    if state.get('architecture') not in ('reference_v2', ARCHITECTURE, OVERLAP_ARCHITECTURE):
         raise ValueError('V2/Topo V2 checkpoint required; legacy BiFPN and aligned Topo are no longer supported')
-    model = ReferenceStrokeModel(image_size=state['image_size'], width=state['width'], pretrained=False)
+    model_type = OverlapStrokeModel if state['architecture'] == OVERLAP_ARCHITECTURE else ReferenceStrokeModel
+    model = model_type(image_size=state['image_size'], width=state['width'], pretrained=False)
     model.load_state_dict(state['model'], strict=True)
-    model.output_mode = 'partition'
     return model.to(device).eval(), state['image_size'], state.get('epoch')
 
 
 def export_hard_masks(image, masks, threshold=.5, output_mode='independent'):
     if output_mode == 'partition':
         return (np.arange(len(masks))[:,None,None] == masks.argmax(0)) & (image[0] > .5)
+    if output_mode == 'overlap':
+        return (masks >= threshold) & (image[0] > .5)
     return masks >= threshold
 
 
@@ -49,7 +52,10 @@ def preview_topology(image, reference, strokes, probabilities, masks, prefix, ti
     foreground = image[0] > .5
     hard = export_hard_masks(image, masks, threshold, output_mode)
     union = hard.any(0)
-    soft_union = masks.sum(0) if output_mode == 'partition' else image[0]*(1-np.prod(1-probabilities, axis=0))
+    if output_mode == 'overlap':
+        soft_union = masks.max(0)
+    else:
+        soft_union = masks.sum(0) if output_mode == 'partition' else image[0]*(1-np.prod(1-probabilities, axis=0))
     missing = np.zeros((*foreground.shape, 3))
     missing[foreground] = .35
     missing[foreground & ~union] = (1, 0, 0)

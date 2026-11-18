@@ -95,6 +95,9 @@ def run_manifest(checkpoint, manifest, split='val', preview_count=5, csv_path=No
         raise ValueError('Evaluation split must be val or test')
     checkpoint, manifest = existing_path(checkpoint), existing_path(manifest)
     state = torch.load(checkpoint, map_location='cpu', weights_only=True)
+    from .reference_overlap import ARCHITECTURE as OVERLAP_ARCHITECTURE
+    if state.get('architecture') == OVERLAP_ARCHITECTURE:
+        raise ValueError('겹침 체크포인트의 검증에는 교차점_중복_허용 노트북을 사용하세요.')
     size = state['image_size']
     all_rows = read_manifest(manifest)
     indices = [i for i, row in enumerate(all_rows) if row['split'] == split]

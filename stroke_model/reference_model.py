@@ -28,6 +28,8 @@ def warp(strokes, flow):
 
 
 class ReferenceStrokeModel(nn.Module):
+    output_mode = 'partition'
+
     def __init__(self, image_size=128, width=64, pretrained=True,
                  backbone=None, channels=None, channels_last=False, stroke_chunk_size=4):
         super().__init__()
@@ -101,11 +103,14 @@ class ReferenceStrokeModel(nn.Module):
         xy = torch.stack((xx, yy))[None].expand(b, -1, -1, -1)
         logits = self.score_strokes(features, reference, strokes, xy, flow, hints, image)
         logits = logits.float().masked_fill(~active[:, :, None, None], -torch.inf)
-        probabilities = logits.softmax(1) * active[:, :, None, None]
-        probabilities = probabilities / probabilities.sum(1, keepdim=True)
+        probabilities = self.stroke_probabilities(logits, active)
         return {"logits": logits, "probabilities": probabilities,
                 "masks": image * probabilities, "flow": flow, "hints": hints,
                 "active": active}
+
+    def stroke_probabilities(self, logits, active):
+        probabilities = logits.softmax(1) * active[:, :, None, None]
+        return probabilities / probabilities.sum(1, keepdim=True)
 
     def score_strokes(self, features, reference, strokes, xy, flow, hints, image):
         """Same head algebra, batching strokes and computing shared convolution once.
@@ -161,6 +166,12 @@ def stroke_moments(masks, eps=1e-6):
                         (weights * dy.square()).sum((-2, -1))), -1)
 
 
+def flow_smoothness(flow):
+    horizontal = (flow[..., :, 1:] - flow[..., :, :-1]).square().mean()
+    vertical = (flow[..., 1:, :] - flow[..., :-1, :]).square().mean()
+    return vertical + horizontal
+
+
 def partition_loss(output, labels):
     """labels: BxHxW, 0..K-1 for owned pixels; -1 background/unknown.
 
@@ -182,8 +193,6 @@ def partition_loss(output, labels):
     mass = target.sum((-2, -1))
     dice = (2 * (pred * target).sum((-2, -1)) + 1e-6) / (pred.sum((-2, -1)) + mass + 1e-6)
     dice_loss = (1 - dice)[mass > 0].mean()
-    flow = output["flow"]
-    smooth = (flow[..., 1:, :] - flow[..., :-1, :]).square().mean()
-    smooth = smooth + (flow[..., :, 1:] - flow[..., :, :-1]).square().mean()
+    smooth = flow_smoothness(output['flow'])
     return {"loss": ce + dice_loss + .001 * smooth, "ce": ce,
             "dice_loss": dice_loss, "flow_smoothness": smooth}

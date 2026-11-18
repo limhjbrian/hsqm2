@@ -11,6 +11,8 @@ import torch
 from tqdm.auto import tqdm
 from torch.utils.data import Dataset, DataLoader
 from .reference_model import ReferenceStrokeModel, partition_loss
+from .reference_overlap import (ARCHITECTURE as OVERLAP_ARCHITECTURE, OverlapStrokeModel,
+                                overlap_annotations, overlap_loss, overlap_seed_focal_loss)
 
 
 def read_manifest(path):
@@ -33,9 +35,10 @@ def read_manifest(path):
 
 
 class StrokeDataset(Dataset):
-    def __init__(self, rows, size=128, include_topology=False):
+    def __init__(self, rows, size=128, include_topology=False, allow_overlap=False):
         self.rows, self.size = rows, size
         self.include_topology = include_topology
+        self.allow_overlap = allow_overlap
         self.validated = set()
 
     def __len__(self):
@@ -69,7 +72,7 @@ class StrokeDataset(Dataset):
                 raise ValueError('Images/masks must be finite in [0,1], ink=1')
         if labels.shape != image.shape[-2:] or labels.min() < -1 or labels.max() >= len(strokes):
             raise ValueError('Invalid labels')
-        if not (labels >= 0).any():
+        if not self.allow_overlap and not (labels >= 0).any():
             raise ValueError('Sample has no supervised foreground pixels')
         active = strokes.flatten(1).sum(1) > 0
         if not active.any() or not active[labels[labels >= 0]].all():
@@ -93,13 +96,30 @@ def evaluate(model, loader, device, amp=False, amp_dtype=torch.float16,return_de
     count = torch.zeros((), device=device)
     low_recall=torch.zeros((),device=device);minimum_recall=torch.ones((),device=device)
     model.eval()
+    overlap = getattr(model, 'output_mode', 'partition') == 'overlap'
+    shared_count = torch.zeros_like(count)
+    shared_recovered = torch.zeros_like(count)
+    single_count = torch.zeros_like(count)
+    false_shared = torch.zeros_like(count)
     for batch in loader:
         image, ref, strokes, labels = [x.to(device, non_blocking=True) for x in batch[:4]]
         with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp):
-            prediction = model(image, ref, strokes)['probabilities'].argmax(1)
-        known = labels[:, None] >= 0
-        target = torch.nn.functional.one_hot(labels.clamp_min(0), strokes.shape[1]).permute(0, 3, 1, 2).bool() & known
-        pred = torch.nn.functional.one_hot(prediction, strokes.shape[1]).permute(0, 3, 1, 2).bool() & known
+            output = model(image, ref, strokes)
+        if overlap:
+            actual, valid = [x.to(device, non_blocking=True) for x in batch[4:6]]
+            target, known = overlap_annotations(image, actual, valid, output['active'])
+            pred = (output['masks'] >= .5) & known
+            shared = target.sum(1) > 1
+            single = target.sum(1) == 1
+            shared_count += shared.sum()
+            shared_recovered += (shared & (pred == target).all(1)).sum()
+            single_count += single.sum()
+            false_shared += (single & (pred.sum(1) > 1)).sum()
+        else:
+            prediction = output['probabilities'].argmax(1)
+            known = labels[:, None] >= 0
+            target = torch.nn.functional.one_hot(labels.clamp_min(0), strokes.shape[1]).permute(0, 3, 1, 2).bool() & known
+            pred = torch.nn.functional.one_hot(prediction, strokes.shape[1]).permute(0, 3, 1, 2).bool() & known
         mass = target.sum((-2, -1))
         intersection=(target & pred).sum((-2,-1)).float()
         dice = 2 * intersection / (mass + pred.sum((-2, -1))).clamp_min(1)
@@ -113,8 +133,13 @@ def evaluate(model, loader, device, amp=False, amp_dtype=torch.float16,return_de
         raise ValueError('Validation set has no labelled strokes')
     score=(total/count).item()
     if return_details:
-        return dict(val_macro_dice=score,val_low_seed_recall_strokes=int(low_recall.item()),
+        details = dict(val_macro_dice=score,val_low_seed_recall_strokes=int(low_recall.item()),
                     val_annotated_strokes=int(count.item()),val_minimum_seed_recall=minimum_recall.item())
+        if overlap:
+            details.update(val_shared_seed_pixels=int(shared_count.item()),
+                           val_shared_seed_exact_recall=(shared_recovered/shared_count).item() if shared_count else None,
+                           val_false_shared_seed_rate=(false_shared/single_count).item() if single_count else None)
+        return details
     return score
 
 
@@ -142,10 +167,12 @@ def main():
     p.add_argument('--affinity-weight', type=float, default=0., help='Optional same-owner neighbour consistency')
     p.add_argument('--epoch-warning-seconds', type=float, default=None)
     p.add_argument('--init-checkpoint', default=None, help='Compatible V2 weights; starts a new optimizer/run')
+    p.add_argument('--allow-overlap', action='store_true', help='Train independent stroke memberships from actual masks')
     args = p.parse_args()
     from dataclasses import asdict
     from .reference_v2_topology import (ARCHITECTURE, JunctionConfig, TopologyDataset,
-                                      collate_topology, v2_topology_loss, balanced_seed_focal_loss)
+                                      collate_topology, v2_topology_loss, balanced_seed_focal_loss,
+                                      junction_discrepancy)
     junction_config = JunctionConfig(weight=args.junction_weight, every=args.junction_every,
                                      max_strokes=args.junction_max_strokes,hard_fraction=args.junction_hard_fraction)
     from .directional_affinity import directional_affinity_loss
@@ -181,10 +208,11 @@ def main():
     rows = read_manifest(args.manifest)
     loaders = {}
     for split in ('train', 'val'):
-        auxiliary = topology_enabled and split == 'train'
+        auxiliary = args.allow_overlap or (topology_enabled and split == 'train')
         refinement = refinement_enabled and split == 'train'
         dataset_type = OwnershipDataset if refinement else TopologyDataset if auxiliary else StrokeDataset
-        dataset = dataset_type([r for r in rows if r['split'] == split], args.image_size)
+        dataset = dataset_type([r for r in rows if r['split'] == split], args.image_size,
+                               **({'allow_overlap': True} if args.allow_overlap else {}))
         if not len(dataset):
             raise ValueError('Missing split: ' + split)
         loaders[split] = DataLoader(dataset, batch_size=args.batch_size,
@@ -193,10 +221,12 @@ def main():
                                    persistent_workers=args.num_workers > 0)
         print(f'{split}: {len(dataset)} samples, {len(loaders[split])} batches', flush=True)
     print('Loading Swin pretrained weights...', flush=True)
-    model = ReferenceStrokeModel(image_size=args.image_size, pretrained=not bool(args.init_checkpoint)).to(device)
+    model_type = OverlapStrokeModel if args.allow_overlap else ReferenceStrokeModel
+    model = model_type(image_size=args.image_size, pretrained=not bool(args.init_checkpoint)).to(device)
     if args.init_checkpoint:
         checkpoint = torch.load(args.init_checkpoint, map_location='cpu', weights_only=True)
-        if checkpoint.get('architecture') not in ('reference_v2', ARCHITECTURE) or checkpoint.get('image_size') != args.image_size:
+        compatible = ('reference_v2', ARCHITECTURE, OVERLAP_ARCHITECTURE) if args.allow_overlap else ('reference_v2', ARCHITECTURE)
+        if checkpoint.get('architecture') not in compatible or checkpoint.get('image_size') != args.image_size:
             raise ValueError('초기 가중치는 image_size가 같은 reference_v2 체크포인트여야 합니다')
         model.load_state_dict(checkpoint['model'], strict=True)
         print('Initialized V2 weights:', args.init_checkpoint, flush=True)
@@ -209,6 +239,8 @@ def main():
         shutil.copyfile(Path(args.manifest).parent/'preparation_report.json',
                         destination/'ownership_preparation_report.json')
     architecture = ARCHITECTURE if topology_enabled or refinement_enabled or args.seed_focal_weight>0 or args.direction_affinity_weight>0 else 'reference_v2'
+    if args.allow_overlap:
+        architecture = OVERLAP_ARCHITECTURE
     (destination / 'run_config.json').write_text(json.dumps({**vars(args), 'architecture': architecture,
         'junction_config': asdict(junction_config),
         'ownership_config': asdict(ownership_config) if refinement_enabled else None}, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -236,7 +268,20 @@ def main():
             optimizer.zero_grad(set_to_none=True)
             with torch.autocast(device_type=device.type, dtype=amp_dtype, enabled=amp):
                 output = model(image, ref, strokes)
-                if topology_enabled:
+                if args.allow_overlap:
+                    target, valid = [x.to(device, non_blocking=True) for x in batch[4:6]]
+                    annotated, known = overlap_annotations(image, target, valid, output['active'])
+                    loss = overlap_loss(output, annotated, known)
+                    if topology_enabled and global_step % junction_config.every == 0:
+                        auxiliary_started = time.perf_counter()
+                        with torch.autocast(device_type=device.type, enabled=False):
+                            junction = junction_discrepancy(output, target, valid, junction_config,
+                                                            global_step, labels)
+                        loss = loss + junction_config.weight * junction
+                        junction_seconds += time.perf_counter() - auxiliary_started
+                        junction_total += float(junction.detach())
+                        junction_applications += 1
+                elif topology_enabled:
                     applying = global_step % junction_config.every == 0
                     target, valid = ([x.to(device,non_blocking=True) for x in batch[4:6]]
                                      if applying else (None,None))
@@ -250,7 +295,8 @@ def main():
                 else:
                     loss = partition_loss(output, labels)['loss']
                 if args.seed_focal_weight>0:
-                    seed_loss=balanced_seed_focal_loss(output,labels,args.seed_focal_gamma)
+                    seed_loss = (overlap_seed_focal_loss(output, annotated, args.seed_focal_gamma)
+                                 if args.allow_overlap else balanced_seed_focal_loss(output, labels, args.seed_focal_gamma))
                     loss=loss+args.seed_focal_weight*seed_loss
                     seed_focal_total=seed_focal_total+seed_loss.detach()
                 if refinement_enabled:
@@ -262,7 +308,10 @@ def main():
                     affinity_total=affinity_total+refined['affinity'].detach()
                 if args.direction_affinity_weight>0 and global_step%args.direction_affinity_every==0:
                     with torch.autocast(device_type=device.type,enabled=False):
-                        direction_loss=directional_affinity_loss(output,labels,
+                        # The directional KL loss expects a distribution and only sees singleton owners.
+                        directional = ({'probabilities': output['logits'].softmax(1)}
+                                       if args.allow_overlap else output)
+                        direction_loss=directional_affinity_loss(directional,labels,
                             owners if refinement_enabled else None,reliability if refinement_enabled else None)
                     loss=loss+args.direction_affinity_weight*direction_loss
                     direction_total=direction_total+direction_loss.detach()

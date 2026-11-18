@@ -60,7 +60,8 @@ def predict_with_global_alignment(model, image, reference, strokes, enabled=Fals
     aligned = _sample(image, theta)
     output = model(aligned, reference, strokes)
     probabilities = _sample(output['probabilities'], inverse, padding_mode='border')
-    probabilities = probabilities / probabilities.sum(1, keepdim=True).clamp_min(1e-8)
+    if getattr(model, 'output_mode', 'partition') != 'overlap':
+        probabilities = probabilities / probabilities.sum(1, keepdim=True).clamp_min(1e-8)
     result = dict(probabilities=probabilities, masks=image * probabilities,
                   global_alignment_theta=theta, global_alignment_inverse=inverse,
                   global_aligned_image=aligned,

@@ -81,6 +81,9 @@ def run_inference_csv(checkpoint, csv_path, sample_rows=None, dataset_root=None,
         raise ValueError(f'sample_rows must contain data row numbers in 1..{len(frame)}')
     resolve = Resolver(csv_path, existing_path(dataset_root) if dataset_root else csv_path.parent)
     state = torch.load(checkpoint, map_location='cpu', weights_only=True)
+    from .reference_overlap import ARCHITECTURE as OVERLAP_ARCHITECTURE
+    if state.get('architecture') == OVERLAP_ARCHITECTURE:
+        raise ValueError('겹침 체크포인트의 추론에는 Topo 추론 노트북을 사용하세요.')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = ReferenceStrokeModel(image_size=state['image_size'], width=state['width'], pretrained=False)
     model.load_state_dict(state['model'], strict=True)
