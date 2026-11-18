@@ -1,5 +1,9 @@
 # Topo 추출 모델 테스트
 
+[획 추출 모델 사용](../../notebooks/inference/획%20추출%20모델%20사용.ipynb)에서 V2 또는 교차점 중복 허용을 선택한 뒤 직접 쓰거나 테스트 이미지 한 장을 실행할 수 있다. 기본은 InkSight가 만든 테스트 NPZ TAR이며, `CSV_PATH`를 지정하면 기존 CSV와 PNG도 사용할 수 있다. `TEST_IMAGE_NAME`을 비우면 `TEST_IMAGE_NUMBER`를 사용한다. 직접 쓰는 경우 캔버스에서 기준 글자를 선택한다. 둘 다 같은 전역 정렬과 획별 미리보기를 사용한다.
+
+`CHECKPOINT_PATH`를 비우면 선택한 모델에 해당하는 Drive 폴더에서 수정 시각이 최신인 `best.pt`를 찾는다. `stroke_demo_시간/`에 추출 NPZ, 미리보기와 실행 정보가 저장된다. 노트북 재생성은 `python tests/build_stroke_demo_notebook.py`로 실행한다.
+
 ## 추론 시 전체 정렬
 
 `GLOBAL_ALIGNMENT=True`가 노트북의 기본값이다. CSV 추론과 직접 그리는 캔버스에

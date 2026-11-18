@@ -12,8 +12,7 @@ import torch
 
 from .convert_reference_csv import Resolver, existing_path, load_ink, path_list
 from .infer_reference import inference_columns
-from .infer_topology import load_topology, export_hard_masks, ink_diagnostics, preview_topology
-from .global_alignment import predict_with_global_alignment, preview_global_alignment
+from .infer_topology import load_topology, save_topology_prediction
 
 
 def canvas_prompt(options, size, pen):
@@ -68,13 +67,37 @@ def reference_canvas_options(frame,columns,resolve,size):
     for index in frame.drop_duplicates(columns['reference']).index:
         value=frame.iloc[index][columns['reference']]
         reference=load_ink(resolve(value),size)
-        stream=io.BytesIO()
-        Image.fromarray(np.uint8(np.clip(1-reference[0],0,1)*255)).save(stream,format='PNG')
-        options.append(dict(row=int(index),label=Path(str(value).replace('\\','/')).name,
-            preview='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode('ascii')))
+        options.append(canvas_reference_option(int(index), Path(str(value).replace('\\','/')).name, reference))
     if not options:
         raise ValueError('CSV has no reference glyphs')
     return options
+
+
+def canvas_reference_option(index, label, reference):
+    stream = io.BytesIO()
+    Image.fromarray(np.uint8(np.clip(1-reference[0], 0, 1)*255)).save(stream, format='PNG')
+    return dict(row=index, label=label,
+                preview='data:image/png;base64,' + base64.b64encode(stream.getvalue()).decode('ascii'))
+
+
+def save_canvas_input(answer, path, size):
+    with Image.open(io.BytesIO(base64.b64decode(answer['png'].split(',', 1)[1]))) as raw:
+        raw.convert('RGB').save(path)
+    image = load_ink(path, size)
+    if image.max() <= 0:
+        raise ValueError('Canvas is empty')
+    return torch.from_numpy(image)
+
+
+def load_canvas_reference(row, columns, resolve, size):
+    reference = load_ink(resolve(row[columns['reference']]), size)
+    paths = path_list(row[columns['strokes']])
+    if not paths:
+        raise ValueError('Empty reference stroke list')
+    strokes = np.concatenate([load_ink(resolve(p), size) for p in paths])
+    if not (strokes.reshape(len(strokes), -1).max(1) > .5).all():
+        raise ValueError('빈 기준 획입니다. 다른 기준 글자를 선택하세요.')
+    return torch.from_numpy(reference), torch.from_numpy(strokes)
 
 
 def run_topology_canvas(checkpoint,csv_path,dataset_root=None,canvas_size=384,pen_width=18,
@@ -89,40 +112,18 @@ def run_topology_canvas(checkpoint,csv_path,dataset_root=None,canvas_size=384,pe
     print('기준 글자를 선택하고 쓴 뒤 획 추출을 누르세요. 전체 정렬: '+str(global_alignment),flush=True)
     answer=canvas_prompt(options,canvas_size,pen_width)
     row=frame.iloc[int(answer['row'])]
-    reference=load_ink(resolve(row[columns['reference']]),size)
-    paths=path_list(row[columns['strokes']])
-    if not paths:
-        raise ValueError('Empty reference stroke list')
-    strokes=np.concatenate([load_ink(resolve(p),size) for p in paths])
-    if not (strokes.reshape(len(strokes),-1).max(1)>.5).all():
-        raise ValueError('빈 기준 획입니다. 캔버스 셀을 재실행하고 다른 기준 글자를 선택하세요.')
-    raw=Image.open(io.BytesIO(base64.b64decode(answer['png'].split(',',1)[1]))).convert('RGB')
+    reference, strokes = load_canvas_reference(row, columns, resolve, size)
     destination=Path(save_dir) if save_dir else checkpoint.parent/('canvas_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
     destination.mkdir(parents=True,exist_ok=False)
-    raw.save(destination/'input.png')
-    image=load_ink(destination/'input.png',size)
-    if image.max()<=0:
-        raise ValueError('Canvas is empty')
-    with torch.inference_mode():
-        output=predict_with_global_alignment(model,
-            *[torch.from_numpy(x)[None].to(device) for x in (image,reference,strokes)],
-            enabled=global_alignment)
-    probabilities,masks=[output[key][0].float().cpu().numpy() for key in ('probabilities','masks')]
-    alignment_arrays={key: value[0].float().cpu().numpy()
-                      for key,value in output.items() if key.startswith('global_')}
-    np.savez_compressed(destination/'prediction.npz',image=image,reference=reference,reference_strokes=strokes,
-        probabilities=probabilities,soft_masks=masks,hard_masks=export_hard_masks(image,masks,.5,mode),
-        **alignment_arrays)
-    if global_alignment:
-        preview_global_alignment(image,reference,alignment_arrays['global_aligned_image'],
-                                 destination/'canvas_alignment.png',show)
-    stats=ink_diagnostics(image,masks,output_mode=mode)
-    preview_topology(image,reference,strokes,probabilities,masks,destination/'canvas',
-        f'Canvas: {row[columns["reference"]]} | {mode}',.5,show,mode)
+    image = save_canvas_input(answer, destination/'input.png', size)
+    stats = save_topology_prediction(model, device, image, reference,
+            strokes, destination/'canvas', f'Canvas: {row[columns["reference"]]} | {mode}',
+            show=show, global_alignment=global_alignment, npz_path=destination/'prediction.npz')
+    result_path = stats.pop('npz')
     report=dict(checkpoint=str(checkpoint),checkpoint_epoch=epoch,output_mode=mode,
         reference=str(row[columns['reference']]),diagnostics=stats,
         uses_input_stroke_annotations=False,global_alignment=bool(global_alignment),
-        prediction_coordinates='original_input_canvas',npz=str(destination/'prediction.npz'))
+        prediction_coordinates='original_input_canvas',npz=result_path)
     (destination/'canvas.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print('저장:',destination,flush=True)
     return report

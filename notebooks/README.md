@@ -4,7 +4,7 @@
 |---|---|
 | `data/` 데이터셋 생성 | [InkSight 데이터셋 생성](data/inksight_automation.ipynb) |
 | `training/` 학습 | [Topo ZIP/TAR](training/train_topology_zips.ipynb), [교차점 중복 허용](training/교차점_중복_허용.ipynb), [V2 ZIP](training/train_stroke_zips.ipynb), [V2 기준 획](training/train_reference_v2.ipynb), [자모](training/jamo.ipynb) |
-| `inference/` 추론 | [Topo 추론·캔버스](inference/test_topology.ipynb), [V2 추론](inference/infer_reference_v2.ipynb) |
+| `inference/` 추론 | [획 추출 모델 사용](inference/획%20추출%20모델%20사용.ipynb), [Topo 일괄 추론](inference/test_topology.ipynb), [V2 CSV 추론](inference/infer_reference_v2.ipynb) |
 | `evaluation/` 평가·진단 | [Topo 체크포인트 비교](evaluation/compare_topology.ipynb), [폰트 일반화](evaluation/test_topology_fonts.ipynb), [V2 평가](evaluation/test_reference_v2.ipynb), [V2 진단](evaluation/diagnose_reference_v2.ipynb), [자모 평가](evaluation/test_jamo.ipynb) |
 | `metrics/` 구조 지표 | [원본 구조 지표](metrics/structural_indicator.ipynb), [획 구조 진단](metrics/stroke_structure_v2.ipynb), [Topo 추론과 점수](metrics/topology_with_scores.ipynb) |
 

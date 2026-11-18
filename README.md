@@ -7,7 +7,7 @@
 학습·추론·평가·구조 지표별 전체 목록은 [노트북 안내](notebooks/README.md)에서 볼 수 있습니다.
 
 - [Topo 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/training/train_topology_zips.ipynb)
-- [Topo 추론·캔버스](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/inference/test_topology.ipynb)
+- [획 추출 모델 사용](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/inference/%ED%9A%8D%20%EC%B6%94%EC%B6%9C%20%EB%AA%A8%EB%8D%B8%20%EC%82%AC%EC%9A%A9.ipynb) · V2 또는 교차점 중복 허용 모델로 직접 쓰거나 테스트 이미지 한 장 추출
 - [체크포인트 비교](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/evaluation/compare_topology.ipynb)
 - [폰트 일반화 테스트](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/evaluation/test_topology_fonts.ipynb)
 - [추출 및 원본 구조 점수](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/metrics/topology_with_scores.ipynb)

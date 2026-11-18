@@ -92,6 +92,36 @@ def select_pattern_rows(frame, column, pattern):
         str(value).replace('\\','/').rsplit('/',1)[-1].casefold(), pattern.casefold())]
 
 
+def save_topology_prediction(model, device, image, reference, strokes, prefix, title, *,
+                             threshold=.5, show=True, global_alignment=False, npz_path=None):
+    """Predict and save the same previews for a CSV sample, NPZ sample, or canvas."""
+    if not 0 < threshold < 1:
+        raise ValueError('threshold must be between 0 and 1')
+    output_mode = getattr(model, 'output_mode', 'independent')
+    with torch.inference_mode():
+        output = predict_with_global_alignment(model, image[None].to(device), reference[None].to(device),
+                                               strokes[None].to(device), enabled=global_alignment)
+    probabilities, masks = [output[key][0].float().cpu().numpy() for key in ('probabilities', 'masks')]
+    image, reference, strokes = image.numpy(), reference.numpy(), strokes.numpy()
+    arrays = dict(probabilities=probabilities, soft_masks=masks, image=image,
+                  reference=reference, reference_strokes=strokes,
+                  hard_masks=export_hard_masks(image, masks, threshold, output_mode))
+    for key in ('flow', 'hints', 'alignment_theta', 'aligned_reference', 'aligned_strokes',
+                'global_alignment_theta', 'global_alignment_inverse', 'global_aligned_image',
+                'global_aligned_probabilities', 'global_aligned_flow', 'global_aligned_hints'):
+        if key in output:
+            arrays[key] = output[key][0].float().cpu().numpy()
+    if global_alignment:
+        preview_global_alignment(image, reference, arrays['global_aligned_image'], str(prefix)+'_alignment.png', show)
+    npz_path = str(npz_path or (str(prefix)+'.npz'))
+    np.savez_compressed(npz_path, **arrays)
+    diagnostics = ink_diagnostics(image, masks, threshold, output_mode)
+    coverage = diagnostics['covered_ink_fraction']
+    preview_topology(image, reference, strokes, probabilities, masks, prefix,
+                     f'{title} | ink coverage={coverage:.1%}', threshold, show, output_mode)
+    return {'npz': npz_path, **diagnostics}
+
+
 def run_topology_inference(checkpoint, csv_path, dataset_root=None, input_files=None,
                            sample_rows=None, max_samples=8, seed=42, threshold=.5,
                            save_dir=None, show=True, input_pattern=None, global_alignment=False):
@@ -144,30 +174,13 @@ def run_topology_inference(checkpoint, csv_path, dataset_root=None, input_files=
             report['skipped'].append({'csv_row': number, 'reason': str(exc)})
             print(f'Skipped CSV row {number}: {exc}', flush=True)
             continue
-        with torch.inference_mode():
-            output = predict_with_global_alignment(model, image[None].to(device),
-                reference[None].to(device), strokes[None].to(device), enabled=global_alignment)
-        probabilities, masks = [output[key][0].float().cpu().numpy() for key in ('probabilities', 'masks')]
-        arrays = {'probabilities': probabilities, 'soft_masks': masks, 'hard_masks': masks >= threshold,
-                  'image': image.numpy(), 'reference': reference.numpy(), 'reference_strokes': strokes.numpy()}
-        arrays['hard_masks'] = export_hard_masks(image.numpy(), masks, threshold, output_mode)
-        for key in ('flow', 'hints', 'alignment_theta', 'aligned_reference', 'aligned_strokes',
-                    'global_alignment_theta', 'global_alignment_inverse', 'global_aligned_image',
-                    'global_aligned_probabilities', 'global_aligned_flow', 'global_aligned_hints'):
-            if key in output:
-                arrays[key] = output[key][0].float().cpu().numpy()
-        prefix = destination/f'row_{number:05d}'
-        if global_alignment:
-            preview_global_alignment(image.numpy(), reference.numpy(), arrays['global_aligned_image'],
-                                     str(prefix)+'_alignment.png', show)
-        np.savez_compressed(str(prefix)+'.npz', **arrays)
-        diagnostics = ink_diagnostics(image.numpy(), masks, threshold, output_mode)
-        title = f'CSV {number}: {image_path.name} | ink coverage={diagnostics["covered_ink_fraction"]:.1%}'
-        preview_topology(image.numpy(), reference.numpy(), strokes.numpy(), probabilities, masks,
-                         prefix, title, threshold, show, output_mode)
+        title = f'CSV {number}: {image_path.name}'
+        prediction = save_topology_prediction(model, device, image, reference, strokes,
+                    destination/f'row_{number:05d}', title, threshold=threshold, show=show,
+                    global_alignment=global_alignment)
         report['results'].append({'csv_row': number, 'input': str(image_path),
-            'reference': str(reference_path), 'npz': str(prefix)+'.npz', **diagnostics})
-        print(title, flush=True)
+            'reference': str(reference_path), **prediction})
+        print(f'{title} | ink coverage={prediction["covered_ink_fraction"]:.1%}', flush=True)
     (destination/'inference.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     pd.DataFrame(report['results']).to_csv(destination/'ink_coverage.csv', index=False, encoding='utf-8-sig')
     print('Saved:', destination, flush=True)
