@@ -139,5 +139,21 @@ class V2TopologyTests(unittest.TestCase):
                 np.testing.assert_array_equal(arrays['hard_masks'].sum(0),arrays['image'][0]>.5)
 
 
+
+    def test_v2_loader_accepts_base_checkpoint_and_rejects_removed_architectures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)/'best.pt'
+            model = tiny(image_size=64, width=8, pretrained=False)
+            torch.save(dict(architecture='reference_v2', model=model.state_dict(),
+                            image_size=64, width=8, epoch=2), path)
+            with patch('stroke_model.infer_topology.ReferenceStrokeModel', side_effect=tiny):
+                loaded, size, epoch = load_topology(path, 'cpu')
+            self.assertEqual((size, epoch, loaded.output_mode), (64, 2, 'partition'))
+            for architecture in ('reference_topology_aligned_v1', 'BiFPN'):
+                torch.save(dict(architecture=architecture), path)
+                with self.assertRaisesRegex(ValueError, 'no longer supported'):
+                    load_topology(path, 'cpu')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,61 +1,40 @@
-# HSQM
+# HSQM2
 
-한글 이미지 연구 코드와 실험을 관리하는 공용 저장소입니다. 모델 업데이트는 이 저장소의 커밋 이력에서 확인합니다.
+한글 획 추출의 일반화 개선을 위한 연구 저장소입니다. 최신 기준 획 조건부 V2와 V2 + 정션/소유/방향 보조 감독, 학습·추론·평가, 원본 구조 지표와 폰트 일반화 테스트를 유지합니다.
 
-## 폴더 안내
+## 실행
+
+- [Topo 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/train_topology_zips.ipynb)
+- [Topo 추론·캔버스](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_topology.ipynb)
+- [체크포인트 비교](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/compare_topology.ipynb)
+- [폰트 일반화 테스트](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_topology_fonts.ipynb)
+- [추출 및 원본 구조 점수](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/topology_with_scores.ipynb)
+- [원본 구조 지표](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/structural_indicator.ipynb)
+- [V2 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/train_reference_v2.ipynb) · [V2 평가](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_reference_v2.ipynb)
+- [자모 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/jamo.ipynb) · [자모 일반화 평가](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_jamo.ipynb)
+
+## 폴더
 
 | 경로 | 용도 |
 |---|---|
-| [stroke_model/](stroke_model/) | 획 분리 모델, 학습·추론·후처리 및 관련 데이터 처리 코드 |
-| [font_test/](font_test/) | 폰트 관련 실험 코드와 설정을 위한 공간 |
-| [diffusion_model/](diffusion_model/) | 한글 글자 조건부 확산 학습·생성 코드 |
-| [configs/](configs/) | 모델 학습 설정 |
-| [notebooks/](notebooks/) | Colab 실행 및 결과 확인 노트북 |
-| [tests/](tests/) | 코드 검증 및 배포 묶음 생성 도구 |
-| [docs/stroke_model/](docs/stroke_model/) | 획 분리 모델 설명 및 실행 안내 |
-| [diagnostics/](diagnostics/) | 버전 관리하는 소규모 진단 예시 |
+| stroke_model/ | V2/Topo 추출기, 데이터 준비, 학습·추론·평가, 구조 지표 |
+| font_test/ | 폰트 렌더링 및 일반화 평가 지원 |
+| notebooks/ | Colab 실행 노트북 및 생성기 |
+| tests/ | 기능 검증 및 노트북 생성기 |
+| docs/stroke_model/ | 유지하는 기능의 설명 |
+| configs/ | 자모 CSV 예제 |
 
-## 한글 글자 확산 모델 학습 (A100)
-
-- [실행·데이터·한계 설명](docs/diffusion_model/README.md)
-- [Colab에서 실행](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/train_diffusion_a100.ipynb): GitHub main에서 최신 코드를 받아 128×128 한 글자 조건부 DDPM 학습. OCR/기준 획 재구성 보조 손실과 checkpoint 재개 지원. ZIP 업로드 불필요.
-- 노트북 재생성: `python tests/build_diffusion_bundle.py`. 선택적 백업 ZIP은 `outputs/diffusion_bundle/hsqm_diffusion_a100.zip`에 저장.
-- 이 버전은 소형 문자 이미지 학습 프로세스다. AnyText 미세조정·역확산 guidance·검증된 획 오류 점수는 아직 포함하지 않는다.
-
-## 4글자 공동 역확산 보정 실험
-
-- [Colab 실행](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/topo_guided_diffusion.ipynb) — SD1.5/DDIM, strength .65, seed 100. 동일 초기 잠재값으로 보정 없음·기존 획별 보정·윤곽 보조 손실 추가를 비교합니다.
-- [손실·설정·검증 범위](docs/diffusion_model/TOPO_GUIDANCE.md) — 동결 Topo의 추출 획 구조 손실과 기준 대비 미분 가능한 윤곽·국소 잉크량 보조 손실을 사용합니다. 구조 점수 공식은 유지하고 획별 보조 오차를 별도로 출력합니다. 실제 pretrained GPU 품질은 실행 검증 대상입니다.
-
-## 획 분리 모델
-
-- 누락·분리·정션·추가 잉크 구조 지표: [점수 Colab](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/structural_indicator.ipynb) — [공식·설정·API](docs/stroke_model/STRUCTURAL_INDICATOR.md). 기본 source 모드는 글자 전체의 위치·회전·크기를 맞춘 뒤 실제 입력 잉크를 평가해, 추출 채널의 오배정을 원본 누락으로 처리하지 않습니다. 심한 추가·삭제를 강하게 감점하며 사진·점수·정렬 비교를 표시합니다.
-- 실험용 획 구조 진단: [Colab에서 실행](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/stroke_structure_v2.ipynb) — [설정·실행·추출기 학습 API](docs/stroke_model/STROKE_STRUCTURE.md), [과정 설명](docs/stroke_model/STROKE_STRUCTURE_PROCESS.md), [기존 Colab에 붙일 추가 셀](notebooks/stroke_structure_v2_cell.py). 추출된 획의 정션·분리와 기준 대비 누락량을 따로 출력합니다. 원본 글자 품질은 판정하지 않으며 설정은 맨 위에 모았습니다.
-- 획 이미지 ZIP 학습: [Colab에서 실행](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/train_stroke_zips.ipynb) — GitHub의 최신 V2 코드로 Drive의 4개 ZIP을 로컬에 풀고 CSV를 자동 검색하여 학습.
-- ZIP 학습 검증: [기존 V2 평가 Colab](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/test_reference_v2.ipynb) — 최신 ZIP 학습 모델을 자동 선택하고 같은 val 분할과 기존 soft mask 시각화를 재사용.
-- 굵은 자모 마스크 학습: [Jamo Colab](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/jamo.ipynb) — [데이터 준비와 실행](docs/stroke_model/JAMO.md)
-- 자모 일반화 평가: [Jamo test Colab](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/test_jamo.ipynb) — 새로운 변형·강한 변형·미관측 폰트 평가
-- 최신 구현: **기준 획 조건부 V2 (`ReferenceStrokeModel`)** — [구조와 데이터 설계](docs/stroke_model/REFERENCE_V2.md)
-- 기존 모델: **Swin + Warp Hint + Cross-Attention + BiFPN (`SwinWarpHintStrokeModel`)**
-- [학습·추론·Colab 실행 안내](docs/stroke_model/README.md)
-- [그래프 후처리 설명](docs/stroke_model/POSTPROCESS_GRAPH.md)
-
-최신 구현과 최고 성능 체크포인트는 별도로 구분합니다. 학습 결과를 기록할 때 코드 커밋, 설정, 데이터 버전, 평가 지표와 체크포인트 위치를 함께 남깁니다.
-
-## 업데이트 원칙
-
-1. 획 분리 모델 관련 실행 코드는 `stroke_model/`에 저장합니다. 새 연구 항목은 `font_test/`처럼 별도 폴더로 구분합니다.
-2. 동작이나 구조를 바꿀 때 관련 문서·설정도 함께 갱신합니다. 노트북은 저장소의 코드를 가져와 실행하도록 유지합니다.
-3. 변경 내용을 확인하고 필요한 검증을 실행한 후 커밋하고 GitHub에 push합니다. GitHub에서 해당 커밋이 확인되어야 업로드 완료입니다.
-4. 원본 데이터, 모델 가중치, 대용량 생성 결과와 비밀 키는 커밋하지 않습니다. 데이터와 체크포인트는 Drive 등 외부 저장소에서 관리합니다.
-5. 재현할 실험은 실행 당시 Git 커밋을 기록합니다. 코드 수정만으로 학습 완료나 성능 향상을 주장하지 않습니다.
-
-```bash
-git pull --ff-only
-# 파일 수정 및 필요한 검증
-git status
-git diff
-git add <변경한 파일 경로>
-git commit -m "Describe the change"
-git push origin main
+```console
+pip install -r requirements.txt
+python -m unittest discover -s tests -v
 ```
+
+## 정리 범위와 한계
+
+확산 생성·역확산 보정·오류 복원 실험, 구형 BiFPN과 독립/전역정렬 Topo 모델 및 전용 실행 파일을 제거했습니다. 최신 V2/Topo 체크포인트 형식과 학습 손실은 유지합니다. 구형 모델 체크포인트는 이 버전에서 지원하지 않습니다.
+
+실제 획 주석을 검사하는 데이터 로더는 구형 trainer에서 분리해 `stroke_model/annotation_data.py`에 유지합니다. 모든 Colab의 코드 다운로드 주소는 이 포크를 가리킵니다.
+
+정리는 성능 개선이나 재학습을 의미하지 않습니다. 주석된 부분의 Dice, 원본 구조 지표, 폰트별 시각 결과는 서로 다른 측정이며 실제 생성물/손글씨 일반화는 별도 검증이 필요합니다. 데이터·체크포인트는 저장소에 포함하지 않습니다. 정리 전 코드는 Git 이력에서 확인할 수 있습니다.
+
+[모델 및 실행 안내](docs/stroke_model/README.md)

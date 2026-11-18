@@ -1,6 +1,6 @@
 # 원본 글자 구조 평가: 누락·추가·정션·분리
 
-[점수 Colab](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/structural_indicator.ipynb)은 입력 사진과 점수를 함께 표시한다. 기본 `MEASUREMENT_MODE="source"`는 실제 입력 잉크의 구조를 평가한다. `stored`는 이전 추출기 진단값 재현용이며 원본 글자 품질로 해석하지 않는다. 점수 계수는 사람이 정한 규칙이며 사람 평가에 교정된 척도는 아니다.
+[점수 Colab](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/structural_indicator.ipynb)은 입력 사진과 점수를 함께 표시한다. 기본 `MEASUREMENT_MODE="source"`는 실제 입력 잉크의 구조를 평가한다. `stored`는 이전 추출기 진단값 재현용이며 원본 글자 품질로 해석하지 않는다. 점수 계수는 사람이 정한 규칙이며 사람 평가에 교정된 척도는 아니다.
 
 ## 정상 이미지가 낮게 나오던 원인
 

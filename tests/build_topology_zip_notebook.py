@@ -56,7 +56,7 @@ TAR.GZ/TGZ/TAR.BZ2/TAR.XZ도 지원합니다. 기존 네 ZIP 형식도 지원합
 import json, subprocess, sys, tempfile
 root = Path(tempfile.mkdtemp(prefix='hsqm_topology_', dir='/content'))
 subprocess.run(['git', 'clone', '--depth', '1', '--branch', 'main',
-                'https://github.com/yechan25/hsqm.git', str(root)], check=True)
+                'https://github.com/limhjbrian/hsqm2.git', str(root)], check=True)
 commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(root/'requirements.txt')], check=True)
 sys.path.insert(0, str(root))
@@ -73,7 +73,7 @@ drive.mount('/content/drive')
 from stroke_model.prepare_stroke_zips import prepare_stroke_zips
 from stroke_model.convert_reference_csv import existing_path
 from stroke_model.train_reference import read_manifest
-from stroke_model.train_independent import IndependentDataset
+from stroke_model.annotation_data import ActualStrokeDataset
 import matplotlib.pyplot as plt
 DATA_ROOT = '/content/drive/Shareddrives/2026 자율연구/HSQM/dataset/automated_train_dataset'
 CSV_PATH = None  # 직접 지정 가능. 기본은 path (1).csv 우선, 그다음 path.csv/paths.csv.
@@ -93,7 +93,7 @@ print(report['label_policy'], '\\n검증 분리:', report['split_note'])
 print('빈 기준 획으로 제외:', report['skipped_count'], '개 / 목록:', manifest.parent/'skipped_samples.csv')
 rows = read_manifest(manifest)
 print('train:', sum(r['split']=='train' for r in rows), 'val:', sum(r['split']=='val' for r in rows))
-dataset = IndependentDataset(rows, IMAGE_SIZE)
+dataset = ActualStrokeDataset(rows, IMAGE_SIZE)
 for index in range(min(3, len(dataset))):
     image, reference, strokes, target, valid = dataset[index]
     k = len(strokes)

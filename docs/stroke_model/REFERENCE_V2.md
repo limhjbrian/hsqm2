@@ -147,7 +147,7 @@ grid_sample은 1차 이미지 gradient를 지원하지만 고차미분 요구와
 - timm 1.0.29 실제 Swin, pretrained=False에서 순전파, 학습 손실 역전파, 전체 추출기 고정 후 입력 gradient 확인.
 - 파라미터 27,919,325개 중 학습 대상 407,267개. 가중치 동결은 diffusion guidance 메모리 사용을 없애는 것은 아니다.
 - 테스트는 정확도/Colab 실제 학습/사전학습 가중치 다운로드 검증이 아니다.
-- `notebooks/train_reference_v2.ipynb`는 5개 실행 셀. 첫 셀은 `https://github.com/yechan25/hsqm.git`에서 코드를 받고 버전을 출력한다. 두 번째 셀은 알려진 Drive의 `HSQM/dataset/train_dataset/paths.csv`를 자동 변환한다. 이후 train 증강, 학습, 검증 결과 표시 순서다. ZIP/manifest 수동 입력은 필요 없다.
+- `notebooks/train_reference_v2.ipynb`는 5개 실행 셀. 첫 셀은 `https://github.com/limhjbrian/hsqm2.git`에서 코드를 받고 버전을 출력한다. 두 번째 셀은 알려진 Drive의 `HSQM/dataset/train_dataset/paths.csv`를 자동 변환한다. 이후 train 증강, 학습, 검증 결과 표시 순서다. ZIP/manifest 수동 입력은 필요 없다.
 - `python tests/build_reference_bundle.py`로 현재 소스의 ZIP과 노트북을 재생성할 수 있다.
 - 원본 비교 마스크도 동일한 교차점 소유 규약을 적용해야 면적/모양 지표에 정의 차이가 섞이지 않는다.
 

@@ -1,6 +1,6 @@
 # 튜닝 전후와 실제 보조 주석 진단
 
-[비교 코랩](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/compare_topology.ipynb)
+[비교 코랩](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/compare_topology.ipynb)
 
 재학습하거나 가중치 파일을 덮어쓰지 않는다. 동일한 전처리 텐서를 두 모델에 전달한다.
 튜닝 후 best.pt는 최신 v2_topology_runs에서 찾고, 튜닝 전은 해당 실행의

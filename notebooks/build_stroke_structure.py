@@ -82,7 +82,7 @@ from pathlib import Path
 import subprocess, sys, tempfile
 _structure_repo = Path(tempfile.mkdtemp(prefix="structure_runtime_", dir="/content"))
 subprocess.run(["git", "clone", "--depth", "1", "--branch", "main",
-                "https://github.com/yechan25/hsqm.git", str(_structure_repo)], check=True)
+                "https://github.com/limhjbrian/hsqm2.git", str(_structure_repo)], check=True)
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r",
                 str(_structure_repo / "requirements.txt")], check=True)
 sys.path.insert(0, str(_structure_repo))

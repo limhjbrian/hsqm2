@@ -8,7 +8,7 @@ import pandas as pd
 from PIL import Image
 
 from stroke_model.convert_reference_csv import convert_csv
-from stroke_model.train_independent import IndependentDataset
+from stroke_model.annotation_data import ActualStrokeDataset
 from stroke_model.train_reference import read_manifest
 
 
@@ -38,7 +38,7 @@ class TopologyCsvTests(unittest.TestCase):
             manifest = convert_csv(root/'path (1).csv', root/'prepared', size=32, independent=True)
             prepared = read_manifest(manifest)
             self.assertEqual(len(prepared), 4)
-            sample = IndependentDataset(prepared, 32)[0]
+            sample = ActualStrokeDataset(prepared, 32)[0]
             target = sample[3]
             self.assertGreater(float((target[0]*target[1]).sum()), 0)
             self.assertEqual(float(target[2].sum()), 0)

@@ -18,7 +18,7 @@ MODE="test_csv"는 기존 별도 test CSV 전체 평가를 유지한다.
 글자 정보가 없으면 무작위 샘플을 보여주며 글자별 샘플 수도 출력한다. 실제 val에 없는 글자는 표시할 수 없다.
 마지막 선택 셀의 PREVIEW_COUNT/CHARACTERS/PREVIEW_SEED를 바꾸면 전체 평가 없이 시각화만 다시 한다.
 
-[Colab에서 실행](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/train_stroke_zips.ipynb)하고 GPU 런타임에서 위부터 실행한다.
+[Colab에서 실행](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/train_stroke_zips.ipynb)하고 GPU 런타임에서 위부터 실행한다.
 첫 셀은 GitHub main 최신 코드를 clone하고 전체 커밋 SHA를 출력한다. 실행 커밋을 결과 폴더의 git_commit.txt에도 저장한다.
 모델 구현은 기존 ReferenceStrokeModel이며 기본은 Swin 사전학습 + 새 분할 head 학습이다.
 호환되는 reference_v2, image_size=128 best.pt가 있으면 INIT_CHECKPOINT로 가중치를 초기화할 수 있다.

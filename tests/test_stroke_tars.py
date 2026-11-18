@@ -11,7 +11,7 @@ import pandas as pd
 from PIL import Image
 
 from stroke_model.prepare_stroke_zips import discover_archives, extract_checked, prepare_stroke_zips
-from stroke_model.train_independent import IndependentDataset
+from stroke_model.annotation_data import ActualStrokeDataset
 from stroke_model.train_reference import read_manifest
 
 
@@ -68,7 +68,7 @@ class StrokeTarTests(unittest.TestCase):
             data = read_manifest(manifest)
             self.assertEqual(len(data), 6)
             self.assertEqual({r['split'] for r in data}, {'train', 'val'})
-            sample = IndependentDataset(data, 32)[0]
+            sample = ActualStrokeDataset(data, 32)[0]
             self.assertGreater(float((sample[3][0]*sample[3][1]).sum()), 0)
             self.assertEqual(len(list((manifest.parent.parent/'raw').rglob('.complete.json'))), 24)
             signature = json.loads((manifest.parent/'.complete.json').read_text())

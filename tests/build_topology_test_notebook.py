@@ -36,7 +36,7 @@ def main():
 import subprocess, sys, tempfile
 root = Path(tempfile.mkdtemp(prefix='hsqm_topo_test_', dir='/content'))
 subprocess.run(['git', 'clone', '--depth', '1', '--branch', 'main',
-                'https://github.com/yechan25/hsqm.git', str(root)], check=True)
+                'https://github.com/limhjbrian/hsqm2.git', str(root)], check=True)
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(root/'requirements.txt')], check=True)
 sys.path.insert(0, str(root))
 for key in list(sys.modules):

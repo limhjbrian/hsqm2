@@ -34,7 +34,7 @@ CSV에 writer_id/group_id가 없다면 필자 단위 일반화를 보장하지 �
 import json, subprocess, sys, tempfile
 root = Path(tempfile.mkdtemp(prefix="hsqm_zip_code_", dir="/content"))
 subprocess.run(['git', 'clone', '--depth', '1', '--branch', 'main',
-                'https://github.com/yechan25/hsqm.git', str(root)], check=True)
+                'https://github.com/limhjbrian/hsqm2.git', str(root)], check=True)
 commit = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
 subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(root / "requirements.txt")], check=True)
 sys.path.insert(0, str(root))

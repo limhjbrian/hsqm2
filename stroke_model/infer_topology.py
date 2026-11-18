@@ -11,24 +11,17 @@ from tqdm.auto import tqdm
 
 from .convert_reference_csv import Resolver, existing_path
 from .infer_reference import inference_columns, load_inference_row, select_input_files
-from .reference_topology import TopologyStrokeModel, AlignmentConfig
 from .reference_model import ReferenceStrokeModel
 from .reference_v2_topology import ARCHITECTURE
 
 
 def load_topology(checkpoint, device):
     state = torch.load(existing_path(checkpoint), map_location='cpu', weights_only=True)
-    if state.get('architecture') == ARCHITECTURE:
-        model = ReferenceStrokeModel(image_size=state['image_size'], width=state['width'], pretrained=False)
-        model.load_state_dict(state['model'], strict=True)
-        model.output_mode = 'partition'
-        return model.to(device).eval(), state['image_size'], state.get('epoch')
-    if state.get('architecture') != TopologyStrokeModel.architecture:
-        raise ValueError('Topo best.pt required (reference_topology_aligned_v1); V2/BiFPN cannot be used')
-    model = TopologyStrokeModel(image_size=state['image_size'], width=state['width'],
-        context_width=state['context_width'], pretrained=False,
-        alignment_config=AlignmentConfig(**state['alignment_config']))
-    model.load_trained(state)
+    if state.get('architecture') not in ('reference_v2', ARCHITECTURE):
+        raise ValueError('V2/Topo V2 checkpoint required; legacy BiFPN and aligned Topo are no longer supported')
+    model = ReferenceStrokeModel(image_size=state['image_size'], width=state['width'], pretrained=False)
+    model.load_state_dict(state['model'], strict=True)
+    model.output_mode = 'partition'
     return model.to(device).eval(), state['image_size'], state.get('epoch')
 
 

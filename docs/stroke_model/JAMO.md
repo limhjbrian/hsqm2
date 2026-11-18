@@ -1,6 +1,6 @@
 # Jamo: 클래스에서 자모를 골라 합성·학습
 
-[Colab에서 열기](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/jamo.ipynb)
+[Colab에서 열기](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/jamo.ipynb)
 
 기존 ReferenceStrokeModel과 학습·평가 코드를 사용한다. 굵은 원본 자모를 skeleton으로 변환하지 않는다.
 unique_images는 원본 자모 은행이며, 여기서 별도의 합성 학습 데이터를 생성한다.
@@ -78,7 +78,7 @@ TEST_CSV는 별도 held-out CSV가 준비되어 있을 때만 사용한다.
 
 ## Jamo test: 변형과 폰트 일반화
 
-[Test Colab에서 열기](https://colab.research.google.com/github/yechan25/hsqm/blob/main/notebooks/test_jamo.ipynb)
+[Test Colab에서 열기](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_jamo.ipynb)
 
 저장된 best.pt를 고정하여 평가한다. test에서 학습하거나 best checkpoint를 고르지 않는다.
 기본 checkpoint 경로는 대화에서 확인한 jamo_run_20261014_153935_401612/best.pt다.

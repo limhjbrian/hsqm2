@@ -36,7 +36,7 @@ def main():
     add('code','''from pathlib import Path
 import subprocess,sys,tempfile
 root=Path(tempfile.mkdtemp(prefix='hsqm_fonts_',dir='/content'))
-subprocess.run(['git','clone','--depth','1','--branch','main','https://github.com/yechan25/hsqm.git',str(root)],check=True)
+subprocess.run(['git','clone','--depth','1','--branch','main','https://github.com/limhjbrian/hsqm2.git',str(root)],check=True)
 subprocess.run([sys.executable,'-m','pip','install','-q','-r',str(root/'requirements.txt'),'fonttools','ipywidgets'],check=True)
 subprocess.run(['apt-get','update','-qq'],check=True)
 subprocess.run(['apt-get','install','-y','-qq','fonts-nanum'],check=True)
