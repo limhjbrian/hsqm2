@@ -31,7 +31,8 @@ def export_hard_masks(image, masks, threshold=.5, output_mode='independent'):
     if output_mode == 'partition':
         return (np.arange(len(masks))[:,None,None] == masks.argmax(0)) & (image[0] > .5)
     if output_mode == 'overlap':
-        return (masks >= threshold) & (image[0] > .5)
+        # Soft masks already multiply membership probabilities by the input ink intensity.
+        return (masks >= threshold * image[0]) & (image[0] > .5)
     return masks >= threshold
 
 

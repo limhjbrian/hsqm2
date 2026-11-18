@@ -30,6 +30,12 @@ def tiny_overlap(**kwargs):
 
 
 class OverlapTests(unittest.TestCase):
+    def test_hard_overlap_threshold_uses_membership_on_input_ink(self):
+        image = np.array([[[.65, .5, .8]]], dtype=np.float32)
+        probabilities = np.array([[[.6, .9, .4]], [[.7, .9, .6]]], dtype=np.float32)
+        hard = export_hard_masks(image, image * probabilities, output_mode='overlap')
+        np.testing.assert_array_equal(hard, [[[True, False, False]], [[True, False, True]]])
+
     def test_shared_seeds_train_both_channels_and_unannotated_ink_has_no_gradient(self):
         masks = torch.tensor([[[[1., 1., 0., 0.]], [[1., 0., 0., 0.]], [[0., 0., 0., 0.]]]])
         image = torch.ones(1, 1, 1, 4)
@@ -93,6 +99,9 @@ class OverlapTests(unittest.TestCase):
                 hard = export_hard_masks(image[0].numpy(), aligned['masks'][0].numpy(), output_mode=model.output_mode)
                 self.assertEqual(hard[:, 20, 20].sum(), 2)
                 self.assertEqual(hard[:, 0, 0].sum(), 0)
-                metrics = evaluate(model, [(image, image, target, labels, target, valid)], 'cpu', return_details=True)
+                faint_image = image.clone()
+                faint_image[..., 20, 20] = .505
+                metrics = evaluate(model, [(faint_image, image, target, labels, target, valid)],
+                                   'cpu', return_details=True)
                 self.assertEqual(metrics['val_shared_seed_exact_recall'], 1.)
                 self.assertEqual(metrics['val_false_shared_seed_rate'], 1.)

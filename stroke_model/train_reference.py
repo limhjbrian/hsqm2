@@ -108,7 +108,7 @@ def evaluate(model, loader, device, amp=False, amp_dtype=torch.float16,return_de
         if overlap:
             actual, valid = [x.to(device, non_blocking=True) for x in batch[4:6]]
             target, known = overlap_annotations(image, actual, valid, output['active'])
-            pred = (output['masks'] >= .5) & known
+            pred = (output['probabilities'] >= .5) & known
             shared = target.sum(1) > 1
             single = target.sum(1) == 1
             shared_count += shared.sum()
