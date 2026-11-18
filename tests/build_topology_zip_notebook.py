@@ -39,8 +39,9 @@ automated_train_dataset/
 ```
 파일명·번호·개수를 제한하지 않고 하위 폴더까지 TAR/ZIP을 전부 찾습니다.
 TAR.GZ/TGZ/TAR.BZ2/TAR.XZ도 지원합니다. 기존 네 ZIP 형식도 지원합니다.
-`INDEX_MODE='filenames'`를 선택하면 PNG 파일명에서 학습 목록을 만들고 획 번호를 검사합니다.
-기본 `INDEX_MODE='csv'`는 `path (1).csv`를 우선 사용하고, 없으면 `path.csv`/`paths.csv`를 검색합니다.
+기본 `INDEX_MODE='npz'`는 생성 노트북이 올린 `npz/samples-*.tar`를 사용합니다.
+기존 PNG 압축 파일은 `INDEX_MODE='filenames'`로 읽을 수 있습니다.
+`INDEX_MODE='csv'`는 `path (1).csv`를 우선 사용하고, 없으면 `path.csv`/`paths.csv`를 검색합니다.
 입력=input, 기준=target, 정답=input_stroke, 기준 획=target_stroke입니다.
 얇은 정답은 기존 V2처럼 주석된 픽셀만 CE/Dice로 감독합니다. 그 밖의 원본 잉크를 배경으로 벌주지 않습니다.
 실제 정답 획 마스크는 정션 감독과 선택적 약한 영역 주석 생성에 사용합니다. CSV는 완전한 실제 획 경로를 제공한다고 가정합니다.
@@ -76,7 +77,7 @@ from stroke_model.train_reference import read_manifest
 from stroke_model.annotation_data import ActualStrokeDataset
 import matplotlib.pyplot as plt
 DATA_ROOT = '/content/drive/Shareddrives/2026 자율연구/HSQM/dataset/automated_train_dataset'
-INDEX_MODE = 'csv'  # 'filenames': PNG 파일명으로 자동 짝짓기. 'csv': 기존 목록 사용.
+INDEX_MODE = 'npz'  # 'npz': InkSight NPZ TAR. 기존 PNG TAR은 'filenames' 또는 'csv'.
 CSV_PATH = None  # csv 모드에서만 지정. 기본은 path (1).csv, 그다음 path.csv/paths.csv.
 IMAGE_SIZE = 128
 SEED = 42
@@ -89,9 +90,10 @@ if INDEX_MODE == 'csv' and CSV_PATH is None:
 manifest = prepare_stroke_zips(data_root, csv_path=CSV_PATH, size=IMAGE_SIZE, seed=SEED,
                                independent=True, index_mode=INDEX_MODE)
 report = json.loads((manifest.parent/'conversion_report.json').read_text(encoding='utf-8'))
-print('학습 목록 방식:', INDEX_MODE, '\\n저장된 목록:', manifest.parent/'selected_paths.csv')
+print('학습 목록 방식:', INDEX_MODE, '\\n저장된 목록:', manifest.parent / ('selected_samples.json' if INDEX_MODE == 'npz' else 'selected_paths.csv'))
 print(report['label_policy'], '\\n검증 분리:', report['split_note'])
-print('빈 기준 획으로 제외:', report['skipped_count'], '개 / 목록:', manifest.parent/'skipped_samples.csv')
+if INDEX_MODE != 'npz':
+    print('빈 기준 획으로 제외:', report['skipped_count'], '개 / 목록:', manifest.parent/'skipped_samples.csv')
 rows = read_manifest(manifest)
 print('train:', sum(r['split']=='train' for r in rows), 'val:', sum(r['split']=='val' for r in rows))
 dataset = ActualStrokeDataset(rows, IMAGE_SIZE)
@@ -145,8 +147,9 @@ if OWNERSHIP_WEIGHT or AFFINITY_WEIGHT:
     preview_ownership_samples(manifest, count=3)
 output = data_root.parents[1]/'v2_topology_runs'/datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f')
 output.mkdir(parents=True, exist_ok=False)
-for name in ('conversion_report.json', 'selected_paths.csv', 'skipped_samples.csv', '.complete.json'):
-    shutil.copyfile(manifest.parent/name, output/name.lstrip('.'))
+for name in ('conversion_report.json', 'selected_paths.csv', 'selected_samples.json', 'skipped_samples.csv', '.complete.json'):
+    if (manifest.parent / name).is_file():
+        shutil.copyfile(manifest.parent/name, output/name.lstrip('.'))
 (output/'git_commit.txt').write_text(commit)
 cmd = [sys.executable, '-u', '-m', 'stroke_model.train_reference',
        '--manifest', str(manifest), '--output', str(output), '--epochs', str(EPOCHS),

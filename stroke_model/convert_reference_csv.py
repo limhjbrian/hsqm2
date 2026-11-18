@@ -109,7 +109,7 @@ def load_ink(path, size):
 
 
 def convert_csv(csv_path, output, size=128, seed=42, dataset_root=None, split=None, local_only=False,
-                independent=False):
+                independent=False, portable=False):
     if split not in (None, 'test'):
         raise ValueError('split must be None (train/val) or test')
     csv_path = existing_path(csv_path)
@@ -186,13 +186,20 @@ def convert_csv(csv_path, output, size=128, seed=42, dataset_root=None, split=No
                 # These are NOT reconstructed from exclusive labels or templates.
                 arrays.update(target_masks=targets.astype(np.float32),
                               valid_pixels=np.ones_like(image))
-            np.savez_compressed(path, **arrays)
             coverage = float(known.sum() / max(foreground.sum(), 1))
             rows.append({'path': str(path.resolve()), 'group_id': group, 'source': 'legacy_csv_unreviewed',
                          'char_id': str(row[char_col]) if char_col else '', 'source_image': str(image_path)})
             reports.append({'row': int(index), 'foreground_pixels': int(foreground.sum()),
                             'annotation_coverage': coverage, 'overlap_pixels': int((foreground & (counts > 1)).sum()),
                             'missing_pixels': int((foreground & (counts == 0)).sum())})
+            if portable:
+                arrays['sample_metadata'] = np.asarray(json.dumps({
+                    'version': 1, 'size': size, 'name': normalized(image_path.name),
+                    'char_id': rows[-1]['char_id'], 'group_id': group,
+                    'image_digest': digest,
+                    'report': {key: value for key, value in reports[-1].items() if key != 'row'},
+                }, ensure_ascii=False))
+            np.savez_compressed(path, **arrays)
         except (ValueError, FileNotFoundError) as exc:
             raise ValueError(f'CSV 데이터 {index + 1}번째 행: {exc}') from exc
     pd.DataFrame(skipped_rows, columns=['csv_row', 'input_path', 'empty_reference_paths', 'reason']).to_csv(
@@ -219,6 +226,8 @@ def convert_csv(csv_path, output, size=128, seed=42, dataset_root=None, split=No
               'skipped_count': len(skipped_rows), 'skipped_rows': skipped_rows,
               'rows': reports}
     (output / 'conversion_report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+    if portable:
+        return manifest
     print(f"변환 완료: train={sum(r['split']=='train' for r in rows)}, val={sum(r['split']=='val' for r in rows)}, test={sum(r['split']=='test' for r in rows)}")
     print(report['split_note'])
     print(report['label_policy'])

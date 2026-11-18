@@ -93,13 +93,14 @@ preview_reference(manifest, checkpoint=output / "best.pt", count=5)
     markdown('# V2 검증 / test 평가\n기존 평가·획별 확률·soft mask·불확실성 시각화를 재사용합니다. '
              '기본 zip_val은 ZIP 학습 때 저장한 CSV/seed로 val 분할을 복원합니다. 독립 test 점수가 아닙니다. '
              '최신 ZIP 학습 실행의 best.pt를 자동 선택하며 checkpoint로 직접 지정할 수도 있습니다. '
-             '별도 test_dataset 전체 평가는 MODE="test_csv"로 선택하세요. 먼저 두 셀을 실행합니다. '
+             '별도 test_dataset 전체 평가는 MODE="test_npz" 또는 기존 데이터용 "test_csv"로 선택하세요. 먼저 두 셀을 실행합니다. '
              '앞부분 대신 글자별로 골고루 표시하며 마지막 셀에서는 재평가 없이 글자/개수/seed를 바꿔 볼 수 있습니다.\n')
     cells.append(setup_cell)
     code('''from google.colab import drive
 drive.mount("/content/drive")
-from stroke_model.test_reference import run_test, run_zip_validation
-MODE = "zip_val"  # "test_csv": 기존 별도 test CSV 전체 평가
+from stroke_model.test_reference import run_manifest, run_test, run_zip_validation
+from stroke_model.npz_dataset import prepare_npz_dataset
+MODE = "zip_val"  # "test_npz": 새 NPZ 테스트, "test_csv": 기존 별도 테스트
 hsqm = Path("/content/drive/Shareddrives/2026 자율연구/HSQM")
 checkpoint = None  # 특정 best.pt를 평가하려면 전체 경로 지정
 if checkpoint is None:
@@ -111,10 +112,15 @@ print("평가 checkpoint:", checkpoint)
 test_csv = "/content/drive/Shareddrives/2026 자율연구/HSQM/dataset/test_dataset/paths.csv"
 if MODE == "zip_val":
     metrics = run_zip_validation(checkpoint, hsqm / "dataset/automated_train_dataset", preview_count=5)
+elif MODE == "test_npz":
+    import torch
+    image_size = torch.load(checkpoint, map_location="cpu", weights_only=True)["image_size"]
+    manifest = prepare_npz_dataset(hsqm / "dataset/test_dataset", size=image_size, split="test")
+    metrics = run_manifest(checkpoint, manifest, split="test", preview_count=5)
 elif MODE == "test_csv":
     metrics = run_test(checkpoint, test_csv, preview_count=5)
 else:
-    raise ValueError("MODE는 zip_val 또는 test_csv여야 합니다")
+    raise ValueError("MODE는 zip_val, test_npz 또는 test_csv여야 합니다")
 ''')
     code('''# 이미 평가했다면 이 셀만 다시 실행: ZIP 준비/전체 평가를 반복하지 않습니다.
 from stroke_model.test_reference import preview_varied
@@ -146,6 +152,7 @@ summary = run_diagnosis(checkpoint, examples_per_split=3)
              'stroke_model/reference_cache.py',
              'stroke_model/local_reference_data.py',
              'stroke_model/prepare_stroke_zips.py',
+             'stroke_model/stroke_filename_index.py', 'stroke_model/npz_dataset.py',
              'stroke_model/test_reference.py',
              'stroke_model/diagnose_reference.py',
              'tests/test_reference_model.py', 'tests/test_reference_data.py']

@@ -151,8 +151,13 @@ def stage_stroke_archives(source, local_root='/content/hsqm_stroke_zip', roles=N
 
 def prepare_stroke_zips(source, local_root='/content/hsqm_stroke_zip', csv_path=None, size=128, seed=42,
                         independent=False, index_mode='csv'):
+    if index_mode == 'npz':
+        from .npz_dataset import prepare_npz_dataset
+        if csv_path is not None:
+            raise ValueError('NPZ 모드에서는 CSV_PATH를 비워 주세요.')
+        return prepare_npz_dataset(source, local_root, size=size, seed=seed, independent=independent)
     if index_mode not in ('csv', 'filenames'):
-        raise ValueError('index_mode는 csv 또는 filenames여야 합니다.')
+        raise ValueError('index_mode는 npz, csv 또는 filenames여야 합니다.')
     if index_mode == 'filenames' and csv_path is not None:
         raise ValueError('CSV_PATH를 지정하려면 index_mode="csv"를 사용하세요.')
     source = existing_path(source)

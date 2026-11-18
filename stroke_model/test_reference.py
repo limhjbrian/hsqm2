@@ -137,6 +137,11 @@ def run_zip_validation(checkpoint, dataset_root, preview_count=5):
     config = json.loads((run / 'run_config.json').read_text(encoding='utf-8'))
     saved = json.loads((run / 'complete.json').read_text(encoding='utf-8'))
     source = existing_path(dataset_root)
+    if saved.get('index_mode') == 'npz':
+        from .npz_dataset import prepare_npz_dataset
+        manifest = prepare_npz_dataset(source, size=config['image_size'], seed=config['seed'],
+                                       independent=saved['independent'], snapshot=run / 'selected_samples.json')
+        return run_manifest(checkpoint, manifest, split='val', preview_count=preview_count)
     archive_paths = discover_archives(source)
     saved_names = saved.get('archive_relative_paths')
     if saved_names is None:

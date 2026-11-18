@@ -1,4 +1,14 @@
-# Drive ZIP 기반 획 학습
+# Drive NPZ TAR 기반 획 학습
+
+[InkSight 생성 노트북](../../notebooks/data/inksight_automation.ipynb)에서 학습용은 `test=False`, 평가용은 `test=True`로 설정한다. 검수와 획 생성을 마치고 **검수한 PNG를 학습용 NPZ로 묶기**, **NPZ TAR를 Drive에 병합 또는 새로 저장**, **된거 안된거 구분하기** 순서로 실행한다. PNG 정규화와 획 주석 계산은 생성할 때 끝난다. 실행한 목록을 손으로 관리할 필요가 없다.
+
+NPZ에는 입력, 기준 이미지, 기준 획, 소유 주석, 공유 교차점을 포함하는 정답 획 마스크가 들어간다. `NPZ_IMAGE_SIZE` 기본값은 128이며 학습의 `IMAGE_SIZE`와 맞춘다. 작은 배치도 NPZ TAR를 재사용한다. `MAX_TAR_MIB` 기본값은 256이다. 상한 이내로 들어갈 기존 `npz/samples-*.tar`에 추가하고 공간이 없으면 새 TAR를 만든다. 같은 이름과 같은 내용은 재시도에서 건너뛰고, 같은 이름의 내용이 다르면 기존 파일을 덮어쓰지 않고 중단한다. 한 데이터 폴더에는 생성 노트북 한 세션에서 업로드한다.
+
+학습 Colab 두 개는 기본 `INDEX_MODE='npz'`로 로컬에 TAR를 풀고, 저장된 NPZ를 배치에서 읽는다. `selected_samples.json`을 기록하므로 이후 TAR에 새 샘플을 추가해도 당시 검증 분할을 복원할 수 있다. 별도 평가 셋은 V2 평가 Colab에서 `MODE='test_npz'`로 읽는다.
+
+기존 네 역할의 PNG TAR은 새 NPZ TAR와 분리된다. 기존 PNG 아카이브만 학습하려면 `INDEX_MODE='filenames'` 또는 `INDEX_MODE='csv'`를 선택한다.
+
+## 기존 PNG 압축 파일 방식
 
 `prepare_stroke_zips`는 폴더별 TAR 묶음도 지원한다. 데이터 폴더 아래
 `input_stroke`, `input`, `target_stroke`, `target` 폴더의 하위 폴더까지 모든 TAR/ZIP을
@@ -8,7 +18,6 @@
 
 ## CSV 없이 학습 목록 만들기
 
-이미지와 획의 생성 코드는 [InkSight 생성 노트북](../../notebooks/data/inksight_automation.ipynb)에서 관리한다.
 Topo 또는 V2 ZIP 학습 Colab의 **데이터 준비 셀**에서 `INDEX_MODE = 'filenames'`,
 `CSV_PATH = None`으로 설정한다. 이후 네 역할의 압축 파일을 추가하고 준비 셀을 다시 실행하면 된다.
 예를 들어 입력 변형이 `I_Font_가_12.png`이면 다음 파일들이 짝을 이룬다.
@@ -27,13 +36,12 @@ InkSight의 결합 획 미리보기인 `*_c.png`는 획 목록에서 제외한�
 잘못 내보낸 경우에는 이름 검사만으로 구분할 수 없으므로 준비 셀의 획 미리보기도 확인한다.
 
 사용한 목록은 `selected_paths.csv`로 자동 저장된다. 별도 이름 규칙이나 `writer_id`/`group_id`가
-들어간 기존 목록을 사용하려면 `INDEX_MODE = 'csv'`를 선택한다. 이 방식이 기존 노트북의 기본값이다.
-학습에서 파일명 모드를 사용할 때는 생성 노트북의 CSV 작성 셀을 건너뛰어도 된다.
+들어간 기존 목록을 사용하려면 `INDEX_MODE = 'csv'`를 선택한다.
 
 ## 기존 평가 노트북 재사용
 
 `notebooks/evaluation/test_reference_v2.ipynb`의 기본 MODE="zip_val"은 최신 stroke_zip_runs/*/best.pt를 선택한다.
-checkpoint에 경로를 지정하면 특정 실행을 평가한다. 학습 당시 저장한 selected_paths.csv와 run_config의 seed/크기로
+checkpoint에 경로를 지정하면 특정 실행을 평가한다. 기존 PNG 방식은 학습 당시 저장한 selected_paths.csv와 run_config의 seed/크기로
 로컬 데이터를 복원하고 val만 평가한다. 새 실행에서는 압축 파일의 상대 경로, 크기, 수정 시각을 확인한다.
 기존 evaluate/preview_reference를 그대로 사용하여 val Dice, 정답 커버리지, exclusive 예측, 획별 확률/soft mask/entropy를 저장한다.
 결과는 checkpoint 옆 val_results_시간에 저장한다. 이는 모델 선택에 사용한 validation이며 독립 test 평가가 아니다.

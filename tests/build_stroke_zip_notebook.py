@@ -21,8 +21,9 @@ Swin 사전학습 가중치와 패키지는 다운로드합니다.
 
 기본 데이터 폴더: 공유 Drive의 `2026 자율연구/HSQM/dataset/automated_train_dataset`.
 `input_stroke.zip`, `input.zip`, `target_stroke.zip`, `target.zip`을 로컬로 가져옵니다.
-`INDEX_MODE='filenames'`를 선택하면 PNG 파일명에서 학습 목록을 만들고 획 번호를 검사합니다.
-기본 `INDEX_MODE='csv'`는 같은 폴더 또는 ZIP 안의 path.csv/paths.csv를 찾습니다.
+기본 `INDEX_MODE='npz'`는 생성 노트북이 올린 `npz/samples-*.tar`를 사용합니다.
+기존 PNG 압축 파일은 `INDEX_MODE='filenames'`로 읽을 수 있습니다.
+`INDEX_MODE='csv'`는 같은 폴더 또는 ZIP 안의 path.csv/paths.csv를 찾습니다.
 
 기본은 기존 V2 구조 + Swin 사전학습 가중치로 새 학습입니다. 기존 V2 best.pt에서 시작하려면 INIT_CHECKPOINT를 지정하세요.
 이는 가중치 초기화이며 중단된 optimizer/epoch를 복원하는 resume는 아닙니다.
@@ -50,14 +51,14 @@ print("GPU:", torch.cuda.get_device_name(), "GitHub 커밋:", commit)
 drive.mount('/content/drive')
 from stroke_model.prepare_stroke_zips import prepare_stroke_zips
 DATA_ROOT = '/content/drive/Shareddrives/2026 자율연구/HSQM/dataset/automated_train_dataset'
-INDEX_MODE = 'csv'  # 'filenames': PNG 파일명으로 자동 짝짓기. 'csv': 기존 목록 사용.
+INDEX_MODE = 'npz'  # 'npz': InkSight NPZ TAR. 기존 PNG TAR은 'filenames' 또는 'csv'.
 CSV_PATH = None  # csv 모드에서만 지정. None이면 path.csv/paths.csv 자동 검색.
 IMAGE_SIZE = 128
 SEED = 42
 manifest = prepare_stroke_zips(DATA_ROOT, csv_path=CSV_PATH, size=IMAGE_SIZE, seed=SEED,
                                index_mode=INDEX_MODE)
 report = json.loads((manifest.parent / 'conversion_report.json').read_text(encoding='utf-8'))
-print('학습 목록 방식:', INDEX_MODE, '\\n저장된 목록:', manifest.parent/'selected_paths.csv')
+print('학습 목록 방식:', INDEX_MODE, '\\n저장된 목록:', manifest.parent / ('selected_samples.json' if INDEX_MODE == 'npz' else 'selected_paths.csv'))
 print('검증 분리:', report['split_note'])
 from stroke_model.preview_reference import preview_reference
 preview_reference(manifest, count=5)
@@ -72,8 +73,9 @@ BATCH_SIZE = 8  # CUDA 메모리 부족 시 4 또는 2
 INIT_CHECKPOINT = None  # 예: '/content/drive/.../best.pt'; 같은 image_size의 reference_v2만 허용
 output = Path(DATA_ROOT).parents[1] / 'stroke_zip_runs' / datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f')
 output.mkdir(parents=True, exist_ok=False)
-for name in ('conversion_report.json', 'selected_paths.csv', '.complete.json'):
-    shutil.copyfile(manifest.parent / name, output / name.lstrip('.'))
+for name in ('conversion_report.json', 'selected_paths.csv', 'selected_samples.json', '.complete.json'):
+    if (manifest.parent / name).is_file():
+        shutil.copyfile(manifest.parent / name, output / name.lstrip('.'))
 shutil.copyfile(root / 'stroke_model/reference_model.py', output / 'reference_model.py')
 (output / 'git_commit.txt').write_text(commit)
 cmd = [sys.executable, '-u', '-m', 'stroke_model.train_reference',
