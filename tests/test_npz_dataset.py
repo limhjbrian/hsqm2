@@ -21,11 +21,13 @@ class NpzDatasetTests(unittest.TestCase):
             for role in roles:
                 (pngs / role).mkdir(parents=True)
                 (source / role / 'nested').mkdir(parents=True)
-            for i in range(3):
-                glyph, sample = f'Font_{i}', f'I_Font_{i}_1'
+            for i, glyph in enumerate(('Font_0', 'Font_1', 'Font_2', '강')):
+                sample = f'I_{glyph}_1'
                 ink = np.full((24, 24), 255, np.uint8)
                 ink[2 + 4*i:4 + 4*i, 4:17] = 0
                 for role, name in zip(roles, (sample, glyph, sample + '_1', glyph + '_1')):
+                    if role == 'target' and glyph == '강':
+                        continue
                     pixels = np.full_like(ink, 255) if role == 'target_stroke' and i == 2 else ink
                     Image.fromarray(pixels).save(pngs / role / f'{name}.png')
             archives = []
@@ -39,6 +41,8 @@ class NpzDatasetTests(unittest.TestCase):
             batch = export_inksight_npz(pngs, root / 'existing', size=24,
                                        expected_samples={'I_Font_0_1'})
             shard, = publish_npz_shards(batch, source / 'npz')
+            with self.assertRaisesRegex(ValueError, '강'):
+                migrate_png_archives(source, root / 'stage', size=24, skip_missing=False)
             with self.assertRaisesRegex(ValueError, '빈 기준 획'):
                 migrate_png_archives(source, root / 'stage', size=24)
             with tarfile.open(shard) as archive:
@@ -46,12 +50,23 @@ class NpzDatasetTests(unittest.TestCase):
             result = migrate_png_archives(source, root / 'stage', size=24, skip_invalid=True)
             self.assertEqual(result['samples'], 2)
             self.assertEqual(result['updated_shards'], [shard.name])
-            self.assertEqual([item['name'] for item in result['skipped']], ['I_Font_2_1.png'])
+            skipped = {item['name']: item for item in result['skipped']}
+            self.assertEqual(set(skipped), {'I_Font_2_1.png', 'I_강_1.png'})
+            self.assertEqual(skipped['I_강_1.png']['reason'], 'missing_file')
+            self.assertIn('강.png', skipped['I_강_1.png']['detail'])
             manifest = prepare_npz_dataset(source, root / 'cache', size=24)
             rows = json.loads(manifest.read_text(encoding='utf-8'))
             self.assertEqual({row['source_image'] for row in rows}, {'I_Font_0_1.png', 'I_Font_1_1.png'})
             self.assertEqual(migrate_png_archives(source, root / 'stage', size=24,
                                                  skip_invalid=True)['updated_shards'], [])
+            csv_path = root / 'legacy.csv'
+            csv_path.write_text('input_path,target_path,input_stroke_paths,target_stroke_paths\n'
+                                'I_Font_0_1.png,Font_0.png,I_Font_0_1_1.png,Font_0_1.png\n'
+                                'I_강_1.png,강.png,I_강_1_1.png,강_1.png\n', encoding='utf-8')
+            csv_result = migrate_png_archives(source, root / 'stage', size=24, csv_path=csv_path)
+            self.assertEqual(csv_result['samples'], 1)
+            self.assertEqual(csv_result['updated_shards'], [])
+            self.assertEqual(csv_result['skipped'][0]['name'], 'I_강_1.png')
             self.assertTrue(all(path.read_bytes() == data for path, data in archives))
 
     def test_export_merge_rollover_and_restore_old_split(self):

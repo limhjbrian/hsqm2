@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import numpy as np
 
-from .convert_reference_csv import convert_csv, existing_path
+from .convert_reference_csv import convert_csv, existing_path, normalized
 from .stroke_filename_index import build_filename_csv
 
 ROLES = ('input', 'target', 'input_stroke', 'target_stroke')
@@ -61,17 +61,19 @@ def export_inksight_npz(png_root, output, size=128, expected_samples=None):
     return output
 
 
-def _export_npz_index(content, root, output, size, *, skip_invalid=False):
+def _export_npz_index(content, root, output, size, *, skip_invalid=False, skip_missing=False):
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix='inksight-export-', dir=output.parent) as temp:
         work = Path(temp)
         index = work / 'index.csv'
         index.write_bytes(content)
         manifest = convert_csv(index, work / 'prepared', size=size, dataset_root=root,
-                               split='test', local_only=True, independent=True, portable=True)
+                               split='test', local_only=True, independent=True, portable=True,
+                               skip_missing=skip_missing)
         report = json.loads((manifest.parent / 'conversion_report.json').read_text(encoding='utf-8'))
         rows = json.loads(manifest.read_text(encoding='utf-8'))
-        skipped = [{'name': Path(row['input_path']).name, 'reason': row['reason']}
+        skipped = [{'name': normalized(row['input_path']).rsplit('/', 1)[-1],
+                    'reason': row['reason'], 'detail': row.get('detail', '')}
                    for row in report['skipped_rows']]
         export = {}
         for row, statistics in zip(rows, report['rows'], strict=True):
@@ -84,8 +86,9 @@ def _export_npz_index(content, root, output, size, *, skip_invalid=False):
             if sample_id in export:
                 raise ValueError(f'동일한 입력 이름이 여러 번 나타납니다: {name}')
             export[sample_id] = path
-        if skipped and not skip_invalid:
-            raise ValueError(f'빈 기준 획 또는 소유 주석이 없는 입력 {len(skipped)}개: {skipped[:5]}')
+        invalid = [row for row in skipped if row['reason'] != 'missing_file']
+        if invalid and not skip_invalid:
+            raise ValueError(f'빈 기준 획 또는 소유 주석이 없는 입력 {len(invalid)}개: {invalid[:5]}')
         if not export:
             raise ValueError('변환 가능한 NPZ 샘플이 없습니다.')
         output.mkdir(parents=True)
@@ -95,23 +98,25 @@ def _export_npz_index(content, root, output, size, *, skip_invalid=False):
 
 
 def migrate_png_archives(source, local_root='/content/hsqm_stroke_zip', size=128,
-                         csv_path=None, max_bytes=256 * 2**20, skip_invalid=False):
+                         csv_path=None, max_bytes=256 * 2**20, skip_invalid=False, skip_missing=True):
     """Convert the selected Drive dataset once, preserving its original archives."""
     from .prepare_stroke_zips import archive_filename_csv, stage_stroke_archives
 
     source = existing_path(source)
     cache, raw, signature = stage_stroke_archives(source, local_root)
+    missing = []
     if csv_path:
         content = existing_path(csv_path).read_bytes()
     else:
         paths = [Path(path).relative_to(source) for path, _, _ in signature]
-        content = archive_filename_csv(raw, paths)
+        content = archive_filename_csv(raw, paths, missing=missing if skip_missing else None)
     with TemporaryDirectory(prefix='png-to-npz-', dir=cache) as temp:
         output = Path(temp) / 'npz'
-        skipped = _export_npz_index(content, raw, output, size, skip_invalid=skip_invalid)
+        skipped = _export_npz_index(content, raw, output, size, skip_invalid=skip_invalid,
+                                    skip_missing=skip_missing)
         count = len(list(output.glob('*.npz')))
         shards = publish_npz_shards(output, source / 'npz', max_bytes=max_bytes)
-    return {'samples': count, 'skipped': skipped, 'updated_shards': [p.name for p in shards],
+    return {'samples': count, 'skipped': missing + skipped, 'updated_shards': [p.name for p in shards],
             'destination': str(source / 'npz')}
 
 

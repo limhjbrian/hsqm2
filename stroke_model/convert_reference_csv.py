@@ -109,7 +109,7 @@ def load_ink(path, size):
 
 
 def convert_csv(csv_path, output, size=128, seed=42, dataset_root=None, split=None, local_only=False,
-                independent=False, portable=False):
+                independent=False, portable=False, skip_missing=False):
     if split not in (None, 'test'):
         raise ValueError('split must be None (train/val) or test')
     csv_path = existing_path(csv_path)
@@ -201,6 +201,10 @@ def convert_csv(csv_path, output, size=128, seed=42, dataset_root=None, split=No
                 }, ensure_ascii=False))
             np.savez_compressed(path, **arrays)
         except (ValueError, FileNotFoundError) as exc:
+            if skip_missing and isinstance(exc, FileNotFoundError):
+                skipped_rows.append({'csv_row': int(index) + 1, 'input_path': str(row[cols['image']]),
+                                     'reason': 'missing_file', 'detail': str(exc)})
+                continue
             raise ValueError(f'CSV 데이터 {index + 1}번째 행: {exc}') from exc
     pd.DataFrame(skipped_rows, columns=['csv_row', 'input_path', 'empty_reference_paths', 'reason']).to_csv(
         output / 'skipped_samples.csv', index=False, encoding='utf-8-sig')

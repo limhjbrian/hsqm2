@@ -30,7 +30,7 @@ def _strokes_by_parent(paths, role):
     return grouped
 
 
-def build_filename_csv(files_by_role, raw):
+def build_filename_csv(files_by_role, raw, *, missing=None):
     """Return a CSV snapshot with unambiguous paths relative to extracted data."""
     variant = re.compile(r'I_(.+)_[0-9]+')
     inputs = _pngs_by_stem(files_by_role['input'], 'input')
@@ -39,13 +39,22 @@ def build_filename_csv(files_by_role, raw):
     reference_strokes = _strokes_by_parent(files_by_role['target_stroke'], 'target_stroke')
     if not inputs:
         raise ValueError('input 압축 파일에서 PNG를 찾지 못했습니다.')
+
+    def record_missing(name, detail):
+        if missing is None:
+            raise ValueError(f'{name}: {detail}')
+        missing.append({'name': name, 'reason': 'missing_file', 'detail': detail})
+
     for parents, strokes, role in (
         (inputs, input_strokes, 'input_stroke'),
         (references, reference_strokes, 'target_stroke'),
     ):
         orphans = sorted(strokes.keys() - parents.keys())
-        if orphans:
+        if orphans and missing is None:
             raise ValueError(f'{role}: 대응하는 전체 이미지가 없는 획 묶음 {len(orphans)}개: {orphans[:5]}')
+        if role == 'input_stroke':
+            for sample_id in orphans:
+                record_missing(f'{sample_id}.png', '정답 획에 대응하는 입력 이미지가 없습니다.')
 
     output = StringIO(newline='')
     writer = csv.writer(output, lineterminator='\n')
@@ -60,16 +69,22 @@ def build_filename_csv(files_by_role, raw):
             raise ValueError(f'input: I_<기준ID>_<변형번호>.png 규칙과 맞지 않습니다: {image.name}')
         ref_id = match.group(1)
         if ref_id not in references:
-            raise ValueError(f'{image.name}: 기준 이미지 {ref_id}.png가 없습니다.')
+            record_missing(image.name, f'기준 이미지 {ref_id}.png가 없습니다.')
+            continue
         expected = reference_strokes.get(ref_id, {})
         annotated = input_strokes.get(sample_id, {})
         stroke_ids = sorted(expected)
         if not stroke_ids or stroke_ids != list(range(1, len(stroke_ids) + 1)):
-            raise ValueError(f'{ref_id}.png: 기준 획 번호가 1부터 연속이어야 합니다: {stroke_ids}')
+            record_missing(image.name, f'{ref_id}.png: 기준 획 번호가 1부터 연속이어야 합니다: {stroke_ids}')
+            continue
         if annotated.keys() != expected.keys():
-            missing = sorted(expected.keys() - annotated.keys())
+            missing_ids = sorted(expected.keys() - annotated.keys())
             extra = sorted(annotated.keys() - expected.keys())
-            raise ValueError(f'{image.name}: 정답 획 번호 불일치 (누락: {missing}, 초과: {extra})')
+            detail = f'정답 획 번호 불일치 (누락: {missing_ids}, 초과: {extra})'
+            if extra:
+                raise ValueError(f'{image.name}: {detail}')
+            record_missing(image.name, detail)
+            continue
 
         writer.writerow((relative(image), relative(references[ref_id]), len(stroke_ids),
                          repr([relative(annotated[k]) for k in stroke_ids]),

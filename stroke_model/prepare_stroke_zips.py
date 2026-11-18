@@ -149,14 +149,14 @@ def stage_stroke_archives(source, local_root='/content/hsqm_stroke_zip', roles=N
     return cache, raw, signature
 
 
-def archive_filename_csv(raw, archive_paths):
+def archive_filename_csv(raw, archive_paths, *, missing=None):
     """Build an index scoped to the role of each original archive."""
     files_by_role = {Path(archive).stem: [] for archive in ARCHIVES}
     for relative in archive_paths:
         role = relative.parts[0] if len(relative.parts) > 1 else relative.stem
         files_by_role[role].extend(p for p in (raw / _archive_id(relative)).rglob('*')
                                    if p.is_file() and 'input_stroke_ga' not in p.relative_to(raw).parts)
-    return build_filename_csv(files_by_role, raw)
+    return build_filename_csv(files_by_role, raw, missing=missing)
 
 
 def prepare_stroke_zips(source, local_root='/content/hsqm_stroke_zip', csv_path=None, size=128, seed=42,
