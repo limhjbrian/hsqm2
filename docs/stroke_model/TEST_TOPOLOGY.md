@@ -8,7 +8,7 @@ INPUT_PATTERN=None이면 기존 글자별 샘플 선택/전체 모드를 사용�
 준비/설정 셀만 실행한 뒤 캔버스 셀로 바로 넘어갈 수 있다. 입력 획 정답은 읽지 않는다.
 새 모델의 raw soft 출력과 V2 argmax를 사용하고, 이전 그림처럼 독립 threshold로 오해하지 않는다.
 
-[테스트 코랩 열기](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_topology.ipynb)
+[테스트 코랩 열기](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/inference/test_topology.ipynb)
 
 준비/Drive 연결 → 모델과 테스트 CSV 선택 → 추론 순으로 실행한다. 재학습하지 않는다.
 기본 체크포인트는 `HSQM/v2_topology_runs/시간/best.pt` 중 가장 최근 실행이며 경로를 출력한다.

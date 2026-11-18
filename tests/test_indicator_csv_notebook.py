@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import torch
-from notebooks.build_structural_indicator import RUN, SETTINGS
+from notebooks.builders.build_structural_indicator import RUN, SETTINGS
 import stroke_model.structural_indicator as scoring
 
 

@@ -1,6 +1,6 @@
 # Topo 추출과 기존 원본 점수 함께 보기
 
-[통합 코랩](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/topology_with_scores.ipynb)
+[통합 코랩](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/metrics/topology_with_scores.ipynb)
 
 사용자가 선택한 방식은 원본 점수 + Topo 추출 결과다. Topo의 가중치와 기존 점수 공식은
 바꾸지 않고 같은 입력 스냅샷으로 두 경로를 연결한다. 점수 계산에 soft_masks를 사용하지 않는다.

@@ -147,7 +147,7 @@ grid_sample은 1차 이미지 gradient를 지원하지만 고차미분 요구와
 - timm 1.0.29 실제 Swin, pretrained=False에서 순전파, 학습 손실 역전파, 전체 추출기 고정 후 입력 gradient 확인.
 - 파라미터 27,919,325개 중 학습 대상 407,267개. 가중치 동결은 diffusion guidance 메모리 사용을 없애는 것은 아니다.
 - 테스트는 정확도/Colab 실제 학습/사전학습 가중치 다운로드 검증이 아니다.
-- `notebooks/train_reference_v2.ipynb`는 5개 실행 셀. 첫 셀은 `https://github.com/limhjbrian/hsqm2.git`에서 코드를 받고 버전을 출력한다. 두 번째 셀은 알려진 Drive의 `HSQM/dataset/train_dataset/paths.csv`를 자동 변환한다. 이후 train 증강, 학습, 검증 결과 표시 순서다. ZIP/manifest 수동 입력은 필요 없다.
+- `notebooks/training/train_reference_v2.ipynb`는 5개 실행 셀. 첫 셀은 `https://github.com/limhjbrian/hsqm2.git`에서 코드를 받고 버전을 출력한다. 두 번째 셀은 알려진 Drive의 `HSQM/dataset/train_dataset/paths.csv`를 자동 변환한다. 이후 train 증강, 학습, 검증 결과 표시 순서다. ZIP/manifest 수동 입력은 필요 없다.
 - `python tests/build_reference_bundle.py`로 현재 소스의 ZIP과 노트북을 재생성할 수 있다.
 - 원본 비교 마스크도 동일한 교차점 소유 규약을 적용해야 면적/모양 지표에 정의 차이가 섞이지 않는다.
 
@@ -187,7 +187,7 @@ latent diffusion이면 differentiable VAE decode → 고정된 글자 crop/resiz
 강도를 올렸을 때 점수만 좋아지고 실제 글자가 나빠지는지 독립 지표·사람 평가로 확인한다. 현재 저장소에는 범용 확산 sampler 연결을 추가하지 않았으며 사용할 확산 모델과 scheduler를 정한 후 구현해야 한다.
 근거: [Universal Guidance for Diffusion Models](https://arxiv.org/abs/2302.07121). 위 소규모 한글 적용 순서는 해당 논문의 직접적인 성능 보장이 아닌 본 프로젝트의 제안이다.
 
-test 평가는 `notebooks/test_reference_v2.ipynb`의 2개 셀로 실행한다. 저장된 best.pt와 test_dataset/paths.csv 경로가 기본 입력이며 학습/증강은 실행하지 않는다. test CSV 전체를 test split으로 변환하므로 샘플 1개도 평가할 수 있다. 결과의 test_macro_dice_annotated는 주석된 픽셀에 한정된 획별 평균 Dice이며 annotation_coverage를 같이 확인한다. best.pt 옆 test_results 폴더에 metrics.json과 미리보기 PNG를 저장한다. test 변환은 재사용하며 원본 이미지를 같은 경로에서 수정했다면 해당 test_data 캐시를 새로 준비해야 한다. 별도 test 폴더가 있다는 것만으로 필자/이미지 중복이 없음을 보증하지 않는다.
+test 평가는 `notebooks/evaluation/test_reference_v2.ipynb`의 2개 셀로 실행한다. 저장된 best.pt와 test_dataset/paths.csv 경로가 기본 입력이며 학습/증강은 실행하지 않는다. test CSV 전체를 test split으로 변환하므로 샘플 1개도 평가할 수 있다. 결과의 test_macro_dice_annotated는 주석된 픽셀에 한정된 획별 평균 Dice이며 annotation_coverage를 같이 확인한다. best.pt 옆 test_results 폴더에 metrics.json과 미리보기 PNG를 저장한다. test 변환은 재사용하며 원본 이미지를 같은 경로에서 수정했다면 해당 test_data 캐시를 새로 준비해야 한다. 별도 test 폴더가 있다는 것만으로 필자/이미지 중복이 없음을 보증하지 않는다.
 
 - 네 번째 셀은 완료된 train/val NPZ를 `/content/reference_v2_local`에 병렬 복사하고 manifest 경로를 로컬로 바꾼다. 런타임 내에서는 재사용한다. NPZ 변환/증강을 다시 하지 않는다. Drive 원본을 같은 경로에서 수정했다면 로컬 캐시도 새로 준비해야 한다.
 - 체크포인트와 history는 Drive에 계속 저장한다. 학습 배치에서는 Drive를 읽지 않는다.
@@ -200,7 +200,7 @@ test 평가는 `notebooks/test_reference_v2.ipynb`의 2개 셀로 실행한다. 
 
 ## Inference without input stroke annotations
 
-Use `notebooks/infer_reference_v2.ipynb` for prediction only. To reuse an already initialized Colab runtime, paste the complete contents of `notebooks/infer_reference_v2_cell.py` into a new cell after setup/Drive mounting. The cell embeds the inference helper, so it also works with an older clone that already has the V2 model and preview modules.
+Use `notebooks/inference/infer_reference_v2.ipynb` for prediction only. To reuse an already initialized Colab runtime, paste the complete contents of `notebooks/cells/infer_reference_v2_cell.py` into a new cell after setup/Drive mounting. The cell embeds the inference helper, so it also works with an older clone that already has the V2 model and preview modules.
 
 Required CSV fields: `input_path`, `target_path`, `target_stroke_paths` (the existing aliases are also supported). `input_stroke_paths` and `total_paths` are ignored; no label conversion, training, augmentation, or Dice evaluation runs. `INPUT_FILES` selects input filenames from the CSV (default: `I_아_2.png`, `I_야_2.png`); `None` processes the full CSV. Duplicate basenames require an exact CSV path. The Python API also supports one-based `sample_rows`, excluding the header, as an alternative. Set `DATASET_ROOT` if image files are outside the CSV tree.
 

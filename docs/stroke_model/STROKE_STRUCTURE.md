@@ -10,11 +10,11 @@
 
 ## 실행
 
-- [독립 Colab 파일](../../notebooks/stroke_structure_v2.ipynb): 업로드 후 설정 → 준비 → 모듈 로드 → 실행.
-- [기존 Colab에 붙일 추가 셀](../../notebooks/stroke_structure_v2_cell.py): 기존 V2 코드 준비 후 파일 전체를 새 셀에 붙인다.
+- [독립 Colab 파일](../../notebooks/metrics/stroke_structure_v2.ipynb): 업로드 후 설정 → 준비 → 모듈 로드 → 실행.
+- [기존 Colab에 붙일 추가 셀](../../notebooks/cells/stroke_structure_v2_cell.py): 기존 V2 코드 준비 후 파일 전체를 새 셀에 붙인다.
 - [진단 모듈](../../stroke_model/stroke_structure.py), [PNG/NPZ 실행 모듈](../../stroke_model/score_stroke_structure.py), [추출기 학습 손실](../../stroke_model/extraction_training.py).
 
-코드는 노트북에 내장하므로 새 모듈의 GitHub 업로드는 실행 전제 조건이 아니다. 기존 V2 모델은 GitHub main에서 받는다. 재생성: `python notebooks/build_stroke_structure.py`.
+코드는 노트북에 내장하므로 새 모듈의 GitHub 업로드는 실행 전제 조건이 아니다. 기존 V2 모델은 GitHub main에서 받는다. 재생성: `python notebooks/builders/build_stroke_structure.py`.
 
 첫 코드 셀에서 MODE, CHECKPOINT, CSV_PATH, INPUT_FILES와 STRUCTURE_CONFIG를 바꾼다. 입력 정답 획 주석은 평가에 필요하지 않다. 누락된 획까지 목표 글자의 전체 기준 목록에 포함한다.
 

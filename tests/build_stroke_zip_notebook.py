@@ -109,7 +109,7 @@ print('겹침/미할당 픽셀은 제외되므로 conversion_report의 annotatio
 ''')
     notebook = dict(cells=cells, metadata=dict(kernelspec=dict(display_name='Python 3', language='python', name='python3'),
                     colab=dict(name='train_stroke_zips.ipynb'), accelerator='GPU'), nbformat=4, nbformat_minor=5)
-    destination = ROOT / 'notebooks/train_stroke_zips.ipynb'
+    destination = ROOT / 'notebooks/training/train_stroke_zips.ipynb'
     destination.write_text(json.dumps(notebook, ensure_ascii=False, indent=1), encoding='utf-8')
     print(destination)
 

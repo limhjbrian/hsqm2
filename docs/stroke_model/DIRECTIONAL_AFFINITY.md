@@ -39,7 +39,7 @@ alone. This is a proposed adaptation, not a guarantee against contamination.
 
 ## Execution and validation
 
-`notebooks/train_topology_zips.ipynb` defaults to weight **0.03**, every **2**
+`notebooks/training/train_topology_zips.ipynb` defaults to weight **0.03**, every **2**
 batches. Trainer defaults remain disabled for backwards compatibility. Set
 `DIRECTION_AFFINITY_WEIGHT=0` for the control run. Radius/window/margin are fixed
 implementation constants in this revision; checkpoints store weight and interval,

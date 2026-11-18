@@ -1,6 +1,6 @@
 # Cross-font Topo testing
 
-Open `notebooks/test_topology_fonts.ipynb`, execute setup and configuration, select
+Open `notebooks/evaluation/test_topology_fonts.ipynb`, execute setup and configuration, select
 a reference thumbnail and type the matching character, select fonts, then execute
 the last cell. Re-run the last cell after changing the selection. Latest V2-based
 Topo best.pt is selected by default; an explicit checkpoint path is preferable

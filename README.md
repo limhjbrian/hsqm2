@@ -4,14 +4,16 @@
 
 ## 실행
 
-- [Topo 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/train_topology_zips.ipynb)
-- [Topo 추론·캔버스](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_topology.ipynb)
-- [체크포인트 비교](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/compare_topology.ipynb)
-- [폰트 일반화 테스트](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_topology_fonts.ipynb)
-- [추출 및 원본 구조 점수](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/topology_with_scores.ipynb)
-- [원본 구조 지표](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/structural_indicator.ipynb)
-- [V2 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/train_reference_v2.ipynb) · [V2 평가](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_reference_v2.ipynb)
-- [자모 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/jamo.ipynb) · [자모 일반화 평가](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/test_jamo.ipynb)
+학습·추론·평가·구조 지표별 전체 목록은 [노트북 안내](notebooks/README.md)에서 볼 수 있습니다.
+
+- [Topo 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/training/train_topology_zips.ipynb)
+- [Topo 추론·캔버스](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/inference/test_topology.ipynb)
+- [체크포인트 비교](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/evaluation/compare_topology.ipynb)
+- [폰트 일반화 테스트](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/evaluation/test_topology_fonts.ipynb)
+- [추출 및 원본 구조 점수](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/metrics/topology_with_scores.ipynb)
+- [원본 구조 지표](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/metrics/structural_indicator.ipynb)
+- [V2 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/training/train_reference_v2.ipynb) · [V2 평가](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/evaluation/test_reference_v2.ipynb)
+- [자모 학습](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/training/jamo.ipynb) · [자모 일반화 평가](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/evaluation/test_jamo.ipynb)
 
 ## 폴더
 
@@ -19,7 +21,7 @@
 |---|---|
 | stroke_model/ | V2/Topo 추출기, 데이터 준비, 학습·추론·평가, 구조 지표 |
 | font_test/ | 폰트 렌더링 및 일반화 평가 지원 |
-| notebooks/ | Colab 실행 노트북 및 생성기 |
+| notebooks/ | 용도별 Colab 노트북, 붙여넣기용 셀, 구조 지표 노트북 생성기 |
 | tests/ | 기능 검증 및 노트북 생성기 |
 | docs/stroke_model/ | 유지하는 기능의 설명 |
 | configs/ | 자모 CSV 예제 |

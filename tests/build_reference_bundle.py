@@ -86,7 +86,7 @@ preview_reference(manifest, checkpoint=output / "best.pt", count=5)
     notebook = {'cells': cells, 'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
                                            'colab': {'name': 'train_reference_v2.ipynb'}, 'accelerator': 'GPU'},
                 'nbformat': 4, 'nbformat_minor': 5}
-    path = ROOT / 'notebooks/train_reference_v2.ipynb'
+    path = ROOT / 'notebooks/training/train_reference_v2.ipynb'
     path.write_text(json.dumps(notebook, ensure_ascii=False, indent=1), encoding='utf-8')
     setup_cell = cells[1]
     cells = []
@@ -125,7 +125,7 @@ preview_varied(metrics["manifest"], metrics["checkpoint"], split=metrics["split"
                count=PREVIEW_COUNT, characters=CHARACTERS, seed=PREVIEW_SEED)
 ''')
     test_notebook = {**notebook, 'cells': cells, 'metadata': {**notebook['metadata'], 'colab': {'name': 'test_reference_v2.ipynb'}}}
-    (ROOT / 'notebooks/test_reference_v2.ipynb').write_text(json.dumps(test_notebook, ensure_ascii=False, indent=1), encoding='utf-8')
+    (ROOT / 'notebooks/evaluation/test_reference_v2.ipynb').write_text(json.dumps(test_notebook, ensure_ascii=False, indent=1), encoding='utf-8')
     cells = []
     markdown('# 학습 원본 / 검증 진단\n재학습하지 않습니다. 원본 train과 val 전체를 비교하고, '
              '각 분할에서 낮은 Dice·낮은 정답 커버리지·높은 Dice 예시를 표시합니다. 증강 이미지는 제외합니다.\n')
@@ -137,7 +137,7 @@ checkpoint = "/content/drive/Shareddrives/2026 자율연구/HSQM/reference_v2_da
 summary = run_diagnosis(checkpoint, examples_per_split=3)
 ''')
     diagnosis_notebook = {**notebook, 'cells': cells, 'metadata': {**notebook['metadata'], 'colab': {'name': 'diagnose_reference_v2.ipynb'}}}
-    (ROOT / 'notebooks/diagnose_reference_v2.ipynb').write_text(json.dumps(diagnosis_notebook, ensure_ascii=False, indent=1), encoding='utf-8')
+    (ROOT / 'notebooks/evaluation/diagnose_reference_v2.ipynb').write_text(json.dumps(diagnosis_notebook, ensure_ascii=False, indent=1), encoding='utf-8')
     dest = ROOT / 'outputs/reference_v2_source.zip'
     dest.parent.mkdir(exist_ok=True)
     files = ['requirements.txt', 'docs/stroke_model/REFERENCE_V2.md', 'stroke_model/__init__.py', 'stroke_model/utils.py',

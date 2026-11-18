@@ -18,7 +18,7 @@ import stroke_model.structural_indicator as scoring
 
 class CanvasCellTests(unittest.TestCase):
     def test_drawn_png_is_scored_against_existing_csv_target(self):
-        cell=Path('notebooks/canvas_cho_cell.py').read_text(encoding='utf-8-sig')
+        cell=Path('notebooks/cells/canvas_cho_cell.py').read_text(encoding='utf-8-sig')
         compile(cell,'canvas_cho_cell','exec')
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

@@ -104,7 +104,7 @@ debug_download_button(canvas_score_report)
     notebook=dict(cells=cells,metadata=dict(accelerator='GPU',
         kernelspec=dict(display_name='Python 3',language='python',name='python3')),
         nbformat=4,nbformat_minor=5)
-    (ROOT/'notebooks/topology_with_scores.ipynb').write_text(json.dumps(notebook,ensure_ascii=False,indent=2),encoding='utf-8')
+    (ROOT/'notebooks/metrics/topology_with_scores.ipynb').write_text(json.dumps(notebook,ensure_ascii=False,indent=2),encoding='utf-8')
 
 
 if __name__=='__main__':main()

@@ -1,6 +1,6 @@
 """Build self-contained Colab artifacts from the current local module sources.
 
-Run from the repo: python notebooks/build_stroke_structure.py
+Run from the repo: python notebooks/builders/build_stroke_structure.py
 The notebook embeds the scoring modules, so it does not depend on their having
 been pushed to GitHub. The existing V2 model/runtime is cloned from main.
 """
@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 SETTINGS = '''# ===== 여기의 설정만 바꾸세요 =====
 # "csv": PNG 파일명으로 모델 추론 + 구조 평가
@@ -199,9 +199,9 @@ M/W는 이 학습 손실에 넣지 않습니다. 입력에서 실제로 없어�
                 'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
                              'colab': {'name': 'stroke_structure_v2.ipynb'}, 'accelerator': 'GPU'},
                 'nbformat': 4, 'nbformat_minor': 5}
-    output = ROOT / 'notebooks' / 'stroke_structure_v2.ipynb'
+    output = ROOT / 'notebooks/metrics/stroke_structure_v2.ipynb'
     output.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
-    one_cell = ROOT / 'notebooks' / 'stroke_structure_v2_cell.py'
+    one_cell = ROOT / 'notebooks/cells/stroke_structure_v2_cell.py'
     one_cell.write_text(SETTINGS + '\n# 기존 V2 준비 셀 실행 후 이 파일 전체를 추가 셀에 붙여 넣으세요.\n\n' +
                         embedded + '\n' + RUN, encoding='utf-8')
     for item in notebook['cells']:

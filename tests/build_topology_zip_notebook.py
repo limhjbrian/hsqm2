@@ -221,7 +221,7 @@ for index in range(min(5, len(validation))):
     notebook = dict(cells=cells, metadata=dict(colab=dict(name='train_topology_zips.ipynb'),
         accelerator='GPU', kernelspec=dict(display_name='Python 3', language='python', name='python3')),
         nbformat=4, nbformat_minor=5)
-    (ROOT/'notebooks/train_topology_zips.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT/'notebooks/training/train_topology_zips.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
 if __name__ == '__main__':

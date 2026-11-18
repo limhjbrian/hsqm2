@@ -99,7 +99,7 @@ print('출력 방식:', canvas_report['output_mode'])
         colab=dict(name='test_topology.ipynb'),
         kernelspec=dict(display_name='Python 3', language='python', name='python3')),
         nbformat=4, nbformat_minor=5)
-    (ROOT/'notebooks/test_topology.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT/'notebooks/inference/test_topology.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
 if __name__ == '__main__':

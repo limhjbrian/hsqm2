@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 SETTINGS = '''# ===== 점수 설정: 누락·분리·정션 + 추가 잉크 =====
 # auto: 현재 structure_results가 있으면 재사용, 없으면 REPORT_PATH 읽기
@@ -135,7 +135,7 @@ def build():
     import ast
     import runpy
     from textwrap import indent
-    diagnostic_setup = runpy.run_path(str(ROOT/'notebooks/build_stroke_structure.py'))['SETUP']
+    diagnostic_setup = runpy.run_path(str(ROOT/'notebooks/builders/build_stroke_structure.py'))['SETUP']
     csv_setup = '# CSV 모드에서만 모델 실행 환경 준비. auto/values는 다운로드하지 않습니다.\nif MODE == "csv":\n'
     csv_setup += indent(diagnostic_setup, '    ')
     csv_setup += '    from google.colab import drive\n    drive.mount("/content/drive")\n'
@@ -167,7 +167,7 @@ from google.colab import files
 files.download(debug_zip)
 '''
     compile(debug_cell, '<export_indicator_debug_cell>', 'exec')
-    (ROOT/'notebooks/export_indicator_debug_cell.py').write_text(debug_cell, encoding='utf-8')
+    (ROOT/'notebooks/cells/export_indicator_debug_cell.py').write_text(debug_cell, encoding='utf-8')
     extra_source = (ROOT/'stroke_model/extra_ink.py').read_text(encoding='utf-8-sig')
     source = source.replace('from .extra_ink import ExtraInkMetric', 'from _extra_ink_runtime import ExtraInkMetric')
     source = source.replace('from .source_structure import', 'from _registered_source_runtime import')
@@ -239,9 +239,9 @@ MODE="values"는 숫자만 입력하는 테스트입니다. 기존 추출 모델
         cell('code', csv_setup), cell('code', loader), cell('code', RUN)],
         'metadata': {'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'},
                      'colab': {'name': 'structural_indicator.ipynb'}}, 'nbformat': 4, 'nbformat_minor': 5}
-    path = ROOT/'notebooks/structural_indicator.ipynb'
+    path = ROOT/'notebooks/metrics/structural_indicator.ipynb'
     path.write_text(json.dumps(notebook, ensure_ascii=False, indent=1)+'\n', encoding='utf-8')
-    one = ROOT/'notebooks/structural_indicator_cell.py'
+    one = ROOT/'notebooks/cells/structural_indicator_cell.py'
     one.write_text(SETTINGS+'\n'+csv_setup+'\n'+loader+'\n'+RUN, encoding='utf-8')
     for item in notebook['cells']:
         if item['cell_type'] == 'code':

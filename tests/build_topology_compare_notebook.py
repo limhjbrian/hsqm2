@@ -117,7 +117,7 @@ print('저장한 원본 캔버스:',canvas_comparison_report['canvas_input'])
     notebook=dict(cells=cells,metadata=dict(accelerator='GPU',
         kernelspec=dict(display_name='Python 3',language='python',name='python3')),
         nbformat=4,nbformat_minor=5)
-    (ROOT/'notebooks/compare_topology.ipynb').write_text(json.dumps(notebook,ensure_ascii=False,indent=2),encoding='utf-8')
+    (ROOT/'notebooks/evaluation/compare_topology.ipynb').write_text(json.dumps(notebook,ensure_ascii=False,indent=2),encoding='utf-8')
 
 
 if __name__=='__main__':main()

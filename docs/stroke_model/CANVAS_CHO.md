@@ -1,10 +1,10 @@
 # Colab 캔버스에서 초 쓰고 평가
 
-기존 [점수 Colab](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/structural_indicator.ipynb)의 설정·준비·점수 모듈 로드 셀을 먼저 실행한다. [캔버스 셀](../../notebooks/canvas_cho_cell.py)을 새 셀에 붙이거나 다음 코드로 불러온다.
+기존 [점수 Colab](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/metrics/structural_indicator.ipynb)의 설정·준비·점수 모듈 로드 셀을 먼저 실행한다. [캔버스 셀](../../notebooks/cells/canvas_cho_cell.py)을 새 셀에 붙이거나 다음 코드로 불러온다.
 
 ```python
 from urllib.request import urlopen
-code = urlopen('https://raw.githubusercontent.com/limhjbrian/hsqm2/main/notebooks/canvas_cho_cell.py').read().decode('utf-8-sig')
+code = urlopen('https://raw.githubusercontent.com/limhjbrian/hsqm2/main/notebooks/cells/canvas_cho_cell.py').read().decode('utf-8-sig')
 exec(compile(code, 'canvas_cho_cell.py', 'exec'))
 ```
 

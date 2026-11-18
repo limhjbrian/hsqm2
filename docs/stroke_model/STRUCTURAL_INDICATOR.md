@@ -1,6 +1,6 @@
 # 원본 글자 구조 평가: 누락·추가·정션·분리
 
-[점수 Colab](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/structural_indicator.ipynb)은 입력 사진과 점수를 함께 표시한다. 기본 `MEASUREMENT_MODE="source"`는 실제 입력 잉크의 구조를 평가한다. `stored`는 이전 추출기 진단값 재현용이며 원본 글자 품질로 해석하지 않는다. 점수 계수는 사람이 정한 규칙이며 사람 평가에 교정된 척도는 아니다.
+[점수 Colab](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/main/notebooks/metrics/structural_indicator.ipynb)은 입력 사진과 점수를 함께 표시한다. 기본 `MEASUREMENT_MODE="source"`는 실제 입력 잉크의 구조를 평가한다. `stored`는 이전 추출기 진단값 재현용이며 원본 글자 품질로 해석하지 않는다. 점수 계수는 사람이 정한 규칙이며 사람 평가에 교정된 척도는 아니다.
 
 ## 정상 이미지가 낮게 나오던 원인
 
@@ -41,7 +41,7 @@
 
 사진은 NPZ의 실제 평가 입력을 우선 표시한다. HTML/PNG 갤러리, 글자별/획별 CSV, 설정·등록 파라미터·새 측정값·기존 추출기 측정값을 담은 `indicator_report.json`을 저장한다. `extra_0001.npz` 등에는 원본 좌표의 입력·추가 지도와 기준 좌표의 정렬 입력·목표·정션 지도도 저장한다. 주 사진은 원본이고 펼침 그림은 진단용 정렬 사진이다.
 
-실행 뒤 **진단 ZIP 다운로드**로 평가한 배열과 감점 내역을 함께 받는다. 이미 실행한 런타임에서는 [진단 ZIP 추가 셀](../../notebooks/export_indicator_debug_cell.py)을 마지막 새 셀에 붙인다. 체크포인트나 전체 데이터셋은 포함하지 않는다.
+실행 뒤 **진단 ZIP 다운로드**로 평가한 배열과 감점 내역을 함께 받는다. 이미 실행한 런타임에서는 [진단 ZIP 추가 셀](../../notebooks/cells/export_indicator_debug_cell.py)을 마지막 새 셀에 붙인다. 체크포인트나 전체 데이터셋은 포함하지 않는다.
 
 ## 확인한 범위
 
