@@ -40,7 +40,7 @@ GLOBAL_ALIGNMENT=False로 정렬 없이 비교할 수 있습니다. 재학습은
     add('code', '''from pathlib import Path
 import subprocess, sys, tempfile
 root = Path(tempfile.mkdtemp(prefix='hsqm_topo_test_', dir='/content'))
-subprocess.run(['git', 'clone', '--depth', '1', '--branch', 'main',
+subprocess.run(['git', 'clone', '--depth', '1', '--branch', 'inference-global-alignment',
                 'https://github.com/limhjbrian/hsqm2.git', str(root)], check=True)
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(root/'requirements.txt')], check=True)
 sys.path.insert(0, str(root))
