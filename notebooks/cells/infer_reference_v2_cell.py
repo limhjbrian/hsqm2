@@ -208,7 +208,7 @@ if CHECKPOINT is None:
     if not candidates:
         raise FileNotFoundError("Set CHECKPOINT to your V2 best.pt path")
     CHECKPOINT = candidates[-1]
-CSV_PATH = globals().get("test_csv", HSQM / "dataset/test_dataset/paths.csv")
+CSV_PATH = globals().get("test_csv", HSQM / "dataset/test_dataset/path.csv")
 DATASET_ROOT = None
 INPUT_FILES = ["I_아_2.png", "I_야_2.png"]  # None = all CSV images.
 COMPARE_ALIGNMENT = True  # Same checkpoint/image, OFF and ON side by side.
