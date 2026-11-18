@@ -13,6 +13,7 @@ from .convert_reference_csv import Resolver, existing_path
 from .infer_reference import inference_columns, load_inference_row, select_input_files
 from .reference_model import ReferenceStrokeModel
 from .reference_v2_topology import ARCHITECTURE
+from .global_alignment import predict_with_global_alignment, preview_global_alignment
 
 
 def load_topology(checkpoint, device):
@@ -87,7 +88,7 @@ def select_pattern_rows(frame, column, pattern):
 
 def run_topology_inference(checkpoint, csv_path, dataset_root=None, input_files=None,
                            sample_rows=None, max_samples=8, seed=42, threshold=.5,
-                           save_dir=None, show=True, input_pattern=None):
+                           save_dir=None, show=True, input_pattern=None, global_alignment=False):
     if not 0 < threshold < 1:
         raise ValueError('threshold must be between 0 and 1')
     if input_files is not None and sample_rows is not None:
@@ -124,7 +125,8 @@ def run_topology_inference(checkpoint, csv_path, dataset_root=None, input_files=
     report = {'checkpoint': str(checkpoint), 'checkpoint_epoch': epoch, 'csv': str(csv_path),
               'uses_input_stroke_annotations': False, 'threshold': threshold,
               'postprocessing': 'v2_argmax_export' if output_mode == 'partition' else 'none',
-              'output_mode': output_mode, 'results': [], 'skipped': []}
+              'output_mode': output_mode, 'global_alignment': bool(global_alignment),
+              'prediction_coordinates': 'original_input_canvas', 'results': [], 'skipped': []}
     print(f'Topo checkpoint epoch={epoch}; {device}; samples={len(selected)}', flush=True)
     for number in tqdm(selected, desc='Topo inference'):
         try:
@@ -137,15 +139,21 @@ def run_topology_inference(checkpoint, csv_path, dataset_root=None, input_files=
             print(f'Skipped CSV row {number}: {exc}', flush=True)
             continue
         with torch.inference_mode():
-            output = model(image[None].to(device), reference[None].to(device), strokes[None].to(device))
+            output = predict_with_global_alignment(model, image[None].to(device),
+                reference[None].to(device), strokes[None].to(device), enabled=global_alignment)
         probabilities, masks = [output[key][0].float().cpu().numpy() for key in ('probabilities', 'masks')]
         arrays = {'probabilities': probabilities, 'soft_masks': masks, 'hard_masks': masks >= threshold,
                   'image': image.numpy(), 'reference': reference.numpy(), 'reference_strokes': strokes.numpy()}
         arrays['hard_masks'] = export_hard_masks(image.numpy(), masks, threshold, output_mode)
-        for key in ('flow', 'hints', 'alignment_theta', 'aligned_reference', 'aligned_strokes'):
+        for key in ('flow', 'hints', 'alignment_theta', 'aligned_reference', 'aligned_strokes',
+                    'global_alignment_theta', 'global_alignment_inverse', 'global_aligned_image',
+                    'global_aligned_probabilities', 'global_aligned_flow', 'global_aligned_hints'):
             if key in output:
                 arrays[key] = output[key][0].float().cpu().numpy()
         prefix = destination/f'row_{number:05d}'
+        if global_alignment:
+            preview_global_alignment(image.numpy(), reference.numpy(), arrays['global_aligned_image'],
+                                     str(prefix)+'_alignment.png', show)
         np.savez_compressed(str(prefix)+'.npz', **arrays)
         diagnostics = ink_diagnostics(image.numpy(), masks, threshold, output_mode)
         title = f'CSV {number}: {image_path.name} | ink coverage={diagnostics["covered_ink_fraction"]:.1%}'

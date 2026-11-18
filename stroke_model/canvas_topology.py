@@ -13,6 +13,7 @@ import torch
 from .convert_reference_csv import Resolver, existing_path, load_ink, path_list
 from .infer_reference import inference_columns
 from .infer_topology import load_topology, export_hard_masks, ink_diagnostics, preview_topology
+from .global_alignment import predict_with_global_alignment, preview_global_alignment
 
 
 def canvas_prompt(options, size, pen):
@@ -77,7 +78,7 @@ def reference_canvas_options(frame,columns,resolve,size):
 
 
 def run_topology_canvas(checkpoint,csv_path,dataset_root=None,canvas_size=384,pen_width=18,
-                        save_dir=None,show=True):
+                        save_dir=None,show=True,global_alignment=False):
     checkpoint,csv_path=existing_path(checkpoint),existing_path(csv_path)
     frame=pd.read_csv(csv_path);columns=inference_columns(frame)
     resolve=Resolver(csv_path,existing_path(dataset_root) if dataset_root else csv_path.parent)
@@ -85,7 +86,7 @@ def run_topology_canvas(checkpoint,csv_path,dataset_root=None,canvas_size=384,pe
     model,size,epoch=load_topology(checkpoint,device)
     mode=getattr(model,'output_mode','independent')
     options=reference_canvas_options(frame,columns,resolve,size)
-    print('기준 글자를 선택하고 비슷한 위치·크기로 쓴 뒤 획 추출을 누르세요.',flush=True)
+    print('기준 글자를 선택하고 쓴 뒤 획 추출을 누르세요. 전체 정렬: '+str(global_alignment),flush=True)
     answer=canvas_prompt(options,canvas_size,pen_width)
     row=frame.iloc[int(answer['row'])]
     reference=load_ink(resolve(row[columns['reference']]),size)
@@ -103,16 +104,25 @@ def run_topology_canvas(checkpoint,csv_path,dataset_root=None,canvas_size=384,pe
     if image.max()<=0:
         raise ValueError('Canvas is empty')
     with torch.inference_mode():
-        output=model(*[torch.from_numpy(x)[None].to(device) for x in (image,reference,strokes)])
+        output=predict_with_global_alignment(model,
+            *[torch.from_numpy(x)[None].to(device) for x in (image,reference,strokes)],
+            enabled=global_alignment)
     probabilities,masks=[output[key][0].float().cpu().numpy() for key in ('probabilities','masks')]
+    alignment_arrays={key: value[0].float().cpu().numpy()
+                      for key,value in output.items() if key.startswith('global_')}
     np.savez_compressed(destination/'prediction.npz',image=image,reference=reference,reference_strokes=strokes,
-        probabilities=probabilities,soft_masks=masks,hard_masks=export_hard_masks(image,masks,.5,mode))
+        probabilities=probabilities,soft_masks=masks,hard_masks=export_hard_masks(image,masks,.5,mode),
+        **alignment_arrays)
+    if global_alignment:
+        preview_global_alignment(image,reference,alignment_arrays['global_aligned_image'],
+                                 destination/'canvas_alignment.png',show)
     stats=ink_diagnostics(image,masks,output_mode=mode)
     preview_topology(image,reference,strokes,probabilities,masks,destination/'canvas',
         f'Canvas: {row[columns["reference"]]} | {mode}',.5,show,mode)
     report=dict(checkpoint=str(checkpoint),checkpoint_epoch=epoch,output_mode=mode,
         reference=str(row[columns['reference']]),diagnostics=stats,
-        uses_input_stroke_annotations=False,npz=str(destination/'prediction.npz'))
+        uses_input_stroke_annotations=False,global_alignment=bool(global_alignment),
+        prediction_coordinates='original_input_canvas',npz=str(destination/'prediction.npz'))
     (destination/'canvas.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
     print('저장:',destination,flush=True)
     return report

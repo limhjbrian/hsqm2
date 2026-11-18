@@ -131,10 +131,13 @@ class V2TopologyTests(unittest.TestCase):
             pd.DataFrame([dict(input_path='input.png',target_path='input.png',
                 target_stroke_paths='s0.png;s1.png')]).to_csv(root/'paths.csv',index=False)
             with patch('stroke_model.infer_topology.ReferenceStrokeModel',side_effect=tiny):
-                report = run_topology_inference(checkpoint,root/'paths.csv',show=False)
+                report = run_topology_inference(checkpoint,root/'paths.csv',show=False,
+                                                global_alignment=True)
             self.assertEqual(report['output_mode'],'partition')
+            self.assertTrue(report['global_alignment'])
             self.assertEqual(report['results'][0]['covered_ink_fraction'],1.)
             with np.load(report['results'][0]['npz']) as arrays:
+                self.assertIn('global_aligned_image', arrays)
                 np.testing.assert_allclose(arrays['soft_masks'].sum(0),arrays['image'][0],atol=1e-6)
                 np.testing.assert_array_equal(arrays['hard_masks'].sum(0),arrays['image'][0]>.5)
 

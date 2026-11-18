@@ -41,14 +41,17 @@ class CanvasTests(unittest.TestCase):
             answer=dict(row=0,png='data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode())
             with patch('stroke_model.canvas_topology.load_topology',return_value=(PartitionFixture(),32,3)), \
                  patch('stroke_model.canvas_topology.canvas_prompt',return_value=answer) as prompt:
-                report=run_topology_canvas(root/'best.pt',root/'path.csv',save_dir=root/'result',show=False)
+                report=run_topology_canvas(root/'best.pt',root/'path.csv',save_dir=root/'result',show=False,
+                                           global_alignment=True)
             self.assertEqual(len(prompt.call_args.args[0]),1)
             self.assertEqual(report['output_mode'],'partition')
             self.assertFalse(report['uses_input_stroke_annotations'])
+            self.assertTrue(report['global_alignment'])
             with np.load(report['npz']) as arrays:
                 np.testing.assert_allclose(arrays['soft_masks'].sum(0),arrays['image'][0])
                 np.testing.assert_array_equal(arrays['hard_masks'].sum(0),arrays['image'][0]>.5)
             self.assertTrue((root/'result/canvas_overview.png').is_file())
+            self.assertTrue((root/'result/canvas_alignment.png').is_file())
 
 
 if __name__ == '__main__':

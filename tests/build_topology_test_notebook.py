@@ -31,6 +31,11 @@ def main():
 3번째 코드 셀은 modified 이미지 전체를 처리합니다. INPUT_PATTERN=None이면 일반 입력도 선택할 수 있습니다.
 4번째 코드 셀은 직접 그리는 캔버스입니다. 기준 글자를 고르고 그린 뒤 획 추출을 누르세요.
 캔버스를 다시 쓰려면 마지막 셀만 재실행하세요. 기존 평가 모델 점수는 계산하지 않습니다.
+전체 정렬은 기본 ON: 입력 잉크의 중심·크기를 기준 글자에 맞춘 뒤 기존 모델로 추출합니다.
+가로세로 비율을 유지하는 균일 확대/축소와 이동만 적용하며 회전·기울기는 보정하지 않습니다.
+정렬 전/후/기준을 표시하고 최종 soft/hard 획은 원래 입력 캔버스 좌표로 복원합니다.
+GLOBAL_ALIGNMENT=False로 정렬 없이 비교할 수 있습니다. 재학습은 하지 않습니다.
+분리된 잡점·추가 획도 잉크 경계에 포함되며 잘린 글자·누락 획의 정렬은 부정확할 수 있습니다.
 ''')
     add('code', '''from pathlib import Path
 import subprocess, sys, tempfile
@@ -58,6 +63,7 @@ SAMPLE_ROWS = None  # 또는 예: [1, 100, 300]. 헤더 제외 1부터 시작. I
 PREVIEW_COUNT = 8  # 둘 다 None이면 기준 글자별로 골고루 선택. None이면 CSV 전체 처리
 INPUT_PATTERN = '*modified*.png'  # 패턴 일치 파일은 개수 제한 없이 전부. None이면 일반 입력도 선택.
 THRESHOLD = 0.5
+GLOBAL_ALIGNMENT = True  # 크기·중심 정렬. False로 기존 추론과 비교.
 
 if CHECKPOINT is None:
     candidates = sorted((HSQM/'v2_topology_runs').glob('*/best.pt'), key=lambda p: p.parent.name)
@@ -83,7 +89,8 @@ print('테스트 CSV:', CSV_PATH)
     add('code', '''report = run_topology_inference(
     CHECKPOINT, CSV_PATH, dataset_root=DATASET_ROOT or DATA_ROOT,
     input_files=INPUT_FILES, sample_rows=SAMPLE_ROWS,
-    max_samples=PREVIEW_COUNT, threshold=THRESHOLD, input_pattern=INPUT_PATTERN)
+    max_samples=PREVIEW_COUNT, threshold=THRESHOLD, input_pattern=INPUT_PATTERN,
+    global_alignment=GLOBAL_ALIGNMENT)
 print('사용한 체크포인트 epoch:', report['checkpoint_epoch'])
 print('완료:', len(report['results']), '/ 빈 기준 획 제외:', len(report['skipped']))
 ''')
@@ -91,7 +98,7 @@ print('완료:', len(report['results']), '/ 빈 기준 획 제외:', len(report[
 from stroke_model.canvas_topology import run_topology_canvas
 canvas_report = run_topology_canvas(
     CHECKPOINT, CSV_PATH, dataset_root=DATASET_ROOT or DATA_ROOT,
-    canvas_size=384, pen_width=18)
+    canvas_size=384, pen_width=18, global_alignment=GLOBAL_ALIGNMENT)
 print('사용한 모델 epoch:', canvas_report['checkpoint_epoch'])
 print('출력 방식:', canvas_report['output_mode'])
 ''')
@@ -99,7 +106,7 @@ print('출력 방식:', canvas_report['output_mode'])
         colab=dict(name='test_topology.ipynb'),
         kernelspec=dict(display_name='Python 3', language='python', name='python3')),
         nbformat=4, nbformat_minor=5)
-    (ROOT/'notebooks/inference/test_topology.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT/'notebooks/inference/test_topology.ipynb').write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':
