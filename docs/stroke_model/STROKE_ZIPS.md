@@ -8,6 +8,14 @@ NPZ에는 입력, 기준 이미지, 기준 획, 소유 주석, 공유 교차점�
 
 기존 네 역할의 PNG TAR은 새 NPZ TAR와 분리된다. 기존 PNG 아카이브만 학습하려면 `INDEX_MODE='filenames'` 또는 `INDEX_MODE='csv'`를 선택한다.
 
+## Drive의 기존 PNG TAR를 한 번만 변환하기
+
+InkSight 생성 노트북 맨 위의 **기존 Drive PNG TAR를 NPZ TAR로 변환** 셀만 실행한다. `RUN_LEGACY_MIGRATION = True`로 바꾸고, 기본 `MIGRATION_DATASET = 'automated_train_dataset'`을 사용한다. 평가용은 `'test_dataset'`으로 지정해 별도로 실행한다. 변환은 원래 네 역할의 압축 파일을 읽어 해당 데이터 폴더의 `npz/`에 저장하며, 학습·평가에서 쓰는 NPZ와 크기 설정(`MIGRATION_IMAGE_SIZE`, 기본 128)을 맞춘다.
+
+기본은 파일명과 획 번호로 연결한다. 기존 CSV의 별도 매핑이나 그룹 ID를 보존해야 하면 `MIGRATION_CSV_PATH`에 파일 경로를 지정한다. 빈 기준 획이나 소유 주석이 전혀 없는 샘플을 확인한 뒤 제외하고 진행하려면 `MIGRATION_SKIP_INVALID = True`로 바꾼다. 제외 항목은 셀 결과에 표시된다. 누락 파일과 모호한 매핑은 계속 오류로 처리한다.
+
+PNG TAR는 읽기만 한다. 변환된 샘플은 여유가 있는 NPZ TAR에 병합하고, 이미 같은 내용으로 변환된 샘플은 건너뛴다. 변환이 끝나면 학습 Colab의 기본 `INDEX_MODE='npz'`로 읽는다.
+
 ## 기존 PNG 압축 파일 방식
 
 `prepare_stroke_zips`는 폴더별 TAR 묶음도 지원한다. 데이터 폴더 아래
