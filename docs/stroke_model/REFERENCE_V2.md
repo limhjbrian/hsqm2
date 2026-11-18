@@ -200,7 +200,31 @@ test 평가는 `notebooks/evaluation/test_reference_v2.ipynb`의 2개 셀로 실
 
 ## Inference without input stroke annotations
 
-Use `notebooks/inference/infer_reference_v2.ipynb` for prediction only. To reuse an already initialized Colab runtime, paste the complete contents of `notebooks/cells/infer_reference_v2_cell.py` into a new cell after setup/Drive mounting. The cell embeds the inference helper, so it also works with an older clone that already has the V2 model and preview modules.
+### 전체 정렬 OFF / ON 비교
+
+[이미지 선택 추론 코랩](https://colab.research.google.com/github/limhjbrian/hsqm2/blob/inference-global-alignment/notebooks/inference/infer_reference_v2.ipynb?authuser=1)은
+기본 `COMPARE_ALIGNMENT=True`로 같은 이미지와 체크포인트의 정렬 OFF/ON을 함께 출력한다.
+모델을 한 번만 로드하고 두 번 추론한다. `INPUT_FILES`로 테스트 CSV 파일명을 선택한다.
+`COMPARE_ALIGNMENT=False`이면 `GLOBAL_ALIGNMENT`로 단일 추론의 정렬 여부를 선택한다.
+Python API `run_inference_csv`의 두 옵션은 모두 기본 False여서 기존 호출은 그대로다.
+
+전체 정렬은 입력 경계 상자의 크기/중심을 기준 글자에 맞추는 균일 확대/축소와 이동이다.
+회전/기울기는 보정하지 않고 가로세로 비율을 유지한다. 상세 처리와 한계는
+[추론 전체 정렬](TEST_TOPOLOGY.md#추론-시-전체-정렬)을 참조한다.
+결과는 원래 체크포인트 해상도의 입력 캔버스 좌표로 복원하고 원래 잉크에 적용한다.
+
+비교 개요: 원본 / 기준 / 정렬된 모델 입력 / OFF 배정 / 복원한 ON 배정 / 달라진 배정.
+획별 비교: 기준 획 / OFF soft / ON soft / OFF exclusive / ON exclusive.
+OFF/ON은 같은 색상표와 0..1 표시 범위를 쓴다. 6획씩 페이지를 나눈다.
+`*_comparison.png`, `*_comparison_strokes_N.png`, OFF `*_unaligned.npz`, ON `*.npz`를 저장한다.
+JSON에 양쪽 파일 경로·정렬 옵션·출력 좌표계와 `changed_ink_fraction`을 기록한다.
+이 변화율은 정답 기반 정확도나 향상 점수가 아니다. 입력 획 주석은 읽지 않는다.
+
+독립 실행 셀과 노트북의 내장 코드는 `python tests/build_reference_inference_notebook.py`로
+`stroke_model/infer_reference.py`에서 함께 생성한다. 노트북은 해당 기능 브랜치를 clone하므로
+첫 설정 셀부터 실행해야 한다. 가중치/학습 구조는 바꾸지 않으며 실제 손글씨 개선은 미검증이다.
+
+Use `notebooks/inference/infer_reference_v2.ipynb` for prediction only. To reuse a Colab runtime, rerun the updated setup cell first, then paste the complete contents of `notebooks/cells/infer_reference_v2_cell.py` into a new cell. The embedded inference helper requires the updated clone containing `stroke_model/global_alignment.py`.
 
 Required CSV fields: `input_path`, `target_path`, `target_stroke_paths` (the existing aliases are also supported). `input_stroke_paths` and `total_paths` are ignored; no label conversion, training, augmentation, or Dice evaluation runs. `INPUT_FILES` selects input filenames from the CSV (default: `I_아_2.png`, `I_야_2.png`); `None` processes the full CSV. Duplicate basenames require an exact CSV path. The Python API also supports one-based `sample_rows`, excluding the header, as an alternative. Set `DATASET_ROOT` if image files are outside the CSV tree.
 
