@@ -9,3 +9,5 @@
 | `metrics/` 구조 지표 | [원본 구조 지표](metrics/structural_indicator.ipynb), [획 구조 진단](metrics/stroke_structure_v2.ipynb), [Topo 추론과 점수](metrics/topology_with_scores.ipynb) |
 
 `cells/`에는 기존 Colab에 붙여 넣는 Python 셀이 있습니다. 구조 지표 노트북과 관련 셀은 `builders/`의 스크립트로 재생성합니다. 학습·추론·평가 노트북 생성 스크립트는 [tests/](../tests/)에 있습니다.
+
+**획 추출 모델 사용**의 3번 셀에서 Drive에 저장된 추출 결과와 획별 마스크를 보고 증강용 원본을 직접 선택할 수 있습니다. 선택 목록은 `HSQM/dataset/selected_stroke_predictions.json`에 저장됩니다.
