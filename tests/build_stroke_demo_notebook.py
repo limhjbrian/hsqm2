@@ -12,7 +12,6 @@ def main():
 
 1. 준비 셀에서 코드를 불러오고 Drive에 연결합니다.
 2. 실행 셀에서 **MODEL**은 `V2` 또는 `교차점 중복 허용`, **INPUT_MODE**는 `직접 쓰기` 또는 `테스트 이미지`를 선택합니다.
-3. **학습 후보 고르기**에서 저장된 결과를 열고 입력과 획별 마스크를 확인합니다. 쓸 결과에 체크한 뒤 **선택 목록 저장**을 누르세요. 기존 결과를 고를 때는 2번 셀을 건너뛰어도 됩니다.
 
 `직접 쓰기`에서는 기준 글자를 고른 뒤 같은 글자를 쓰고 **획 추출**을 누르세요.
 `테스트 이미지`에서는 `TEST_IMAGE_NUMBER`로 한 장을 고르거나, `TEST_IMAGE_NAME`에 파일명을 적습니다.
@@ -23,7 +22,7 @@ def main():
 선택한 모델의 최신 `best.pt`를 사용합니다. 특정 체크포인트를 비교하려면 `CHECKPOINT_PATH`를 입력하세요.
 모델이나 입력 방식을 바꿀 때는 두 번째 셀만 다시 실행하면 됩니다.
 
-선택 목록은 Drive의 `HSQM/dataset/selected_stroke_predictions.json`에 저장됩니다. 증강용 원본을 고르는 단계이며, 실제 학습 데이터에 편입할 때는 같은 원본을 검증·테스트에도 쓰지 않도록 분리하세요.
+학습용 원본을 고르려면 별도의 `학습 데이터 고르기` 노트북을 사용합니다.
 '''
     setup = '''# @title 1. 코드 준비 및 Drive 연결
 from pathlib import Path
@@ -35,7 +34,7 @@ from google.colab import drive
 root = Path(tempfile.mkdtemp(prefix='hsqm_stroke_demo_', dir='/content'))
 subprocess.run(['git', 'clone', '--depth', '1', '--branch', 'main',
                 'https://github.com/limhjbrian/hsqm2.git', str(root)], check=True)
-subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(root/'requirements.txt'), 'ipywidgets'], check=True)
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-r', str(root/'requirements.txt')], check=True)
 sys.path.insert(0, str(root))
 for key in tuple(sys.modules):
     if key == 'stroke_model' or key.startswith('stroke_model.'):
@@ -63,15 +62,8 @@ report = run_stroke_demo(HSQM, MODEL, INPUT_MODE, checkpoint=CHECKPOINT_PATH, da
 print('선택한 입력/기준:', report['source'])
 print(f"입력 잉크 중 여러 획이 공유한 비율: {report['overlapping_ink_fraction']:.1%}")
 '''
-    review = '''# @title 3. 학습 후보 고르기
-from google.colab import output
-from stroke_model.stroke_review import review_stroke_predictions
-
-output.enable_custom_widget_manager()
-review_stroke_predictions(HSQM)
-'''
     cells = [dict(cell_type='markdown', metadata={}, source=intro.splitlines(keepends=True))]
-    for source in (setup, run, review):
+    for source in (setup, run):
         compile(source, '<colab>', 'exec')
         cells.append(dict(cell_type='code', metadata={}, source=source.splitlines(keepends=True),
                           execution_count=None, outputs=[]))

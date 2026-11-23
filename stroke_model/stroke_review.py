@@ -1,135 +1,205 @@
-"""Let the user choose saved stroke predictions for dataset augmentation."""
+"""Review target-glyph predictions and export manually confirmed training samples."""
 
+from collections import defaultdict
+import hashlib
 import html
 import json
 from pathlib import Path
-from tempfile import NamedTemporaryFile
+import random
+import re
+import shutil
+from tempfile import TemporaryDirectory
+import unicodedata
+from uuid import uuid4
+
+import numpy as np
 
 
-SELECTION_PATH = Path('dataset/selected_stroke_predictions.json')
-RUN_PATTERNS = ('*/*/stroke_demo_*/prediction.npz',
-                'reference_v2_data/*/*/stroke_demo_*/prediction.npz',
-                '*/*/topo_test_*/row_*.npz')
+OUTPUT_FOLDER = 'reviewed_stroke_npz'
+INPUT_NAME = re.compile(r'I_(.+)_([^_]+)_\d+\.png', re.IGNORECASE)
 
 
-def find_predictions(root):
-    paths = {path for pattern in RUN_PATTERNS for path in root.glob(pattern) if path.is_file()}
-    metadata = {}
-    batch_rows = {}
-    for path in sorted(paths, key=lambda p: (p.parent.name.split('_', 2)[-1], p.name), reverse=True):
-        folder = path.parent
-        if folder not in metadata:
-            try:
-                metadata[folder] = json.loads((folder/'inference.json').read_text(encoding='utf-8'))
-            except (FileNotFoundError, json.JSONDecodeError):
-                metadata[folder] = {}
-            batch_rows[folder] = {item['csv_row']: item for item in metadata[folder].get('results', [])}
-        report = metadata[folder]
-        if folder.name.startswith('topo_test_'):
-            row_number = path.stem.removeprefix('row_')
-            if not row_number.isdecimal():
-                continue
-            row = int(row_number)
-            result = batch_rows[folder].get(row, {})
-            source = Path(result.get('input', '')).name or f'CSV 행 {row}'
-            mode = '테스트 이미지'
-        else:
-            source = Path(report.get('source', '')).name or folder.name
-            mode = report.get('input_mode', '')
-        yield dict(prediction=path.relative_to(root).as_posix(), source=source, input_mode=mode,
-                   model=report.get('model', report.get('output_mode', '')), checkpoint=report.get('checkpoint'))
+def index_training_rows(rows):
+    """Index only the train partition, preserving the exact font and glyph."""
+    groups = defaultdict(list)
+    for row in rows:
+        name = unicodedata.normalize('NFC', row['source_image'])
+        match = INPUT_NAME.fullmatch(name)
+        if row['split'] == 'train' and match:
+            groups[match.groups()].append(row)
+    return dict(groups)
 
 
-def _load_selection(path):
-    if not path.exists():
-        return {}
-    return {item['prediction']: item for item in json.loads(path.read_text(encoding='utf-8'))['selected']}
+def _read_npz(path):
+    with np.load(path, allow_pickle=False) as data:
+        return dict(data)
 
 
-def _save_selection(path, added, removed):
-    current = _load_selection(path)
-    for key in removed:
-        current.pop(key, None)
-    current.update(added)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as temporary:
-        json.dump({'selected': [current[key] for key in sorted(current)]}, temporary, ensure_ascii=False, indent=2)
-        temporary.write('\n')
-    staged = Path(temporary.name)
+def publish_reviewed_sample(destination, *, prediction=None, training_row):
+    """Save approved predictions in the InkSight layout or copy a real training sample."""
+    original = Path(training_row['path'])
+    if prediction is not None:
+        image = prediction['image'].astype(np.float32)
+        reference = prediction['reference'].astype(np.float32)
+        strokes = prediction['reference_strokes'].astype(np.float32)
+        foreground = image[0] > .5
+        targets = prediction['hard_masks'].astype(bool) & foreground
+        counts = targets.sum(0)
+        if not counts.any():
+            raise ValueError('정답 획으로 저장할 픽셀이 없습니다.')
+        exclusive = counts == 1
+        labels = np.full(foreground.shape, -1, dtype=np.int64)
+        labels[exclusive] = targets.argmax(0)[exclusive]
+        digest = hashlib.sha256(image.tobytes()).hexdigest()
+        identity = hashlib.sha256(reference.tobytes() + strokes.tobytes() + targets.tobytes()).hexdigest()
+        reference_name = training_row['source_image'].removeprefix('I_').rsplit('_', 1)[0]
+        name = f'reviewed_{reference_name}_{identity}.png'
+        metadata = dict(version=1, size=image.shape[-1], name=name, char_id=training_row['char_id'],
+                        group_id=training_row['group_id'], image_digest=digest,
+                        report=dict(foreground_pixels=int(foreground.sum()),
+                                    annotation_coverage=float(exclusive.sum() / foreground.sum()),
+                                    overlap_pixels=int((counts > 1).sum()),
+                                    missing_pixels=int((foreground & (counts == 0)).sum())))
+        arrays = dict(image=image, reference=reference, strokes=strokes, labels=labels,
+                      target_masks=targets.astype(np.float32), valid_pixels=np.ones_like(image),
+                      sample_metadata=np.asarray(json.dumps(metadata, ensure_ascii=False)))
+        filename = hashlib.sha256(name.encode('utf-8')).hexdigest() + '.npz'
+    else:
+        filename = original.name
+
+    destination = Path(destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    path = destination / filename
+    if path.exists():
+        return path
+    partial_path = destination / f'.{uuid4().hex}.partial'
     try:
-        staged.replace(path)
+        if prediction is None:
+            shutil.copyfile(original, partial_path)
+        else:
+            with partial_path.open('wb') as stream:
+                np.savez_compressed(stream, **arrays)
+        partial_path.replace(path)
     finally:
-        staged.unlink(missing_ok=True)
-    return current
+        partial_path.unlink(missing_ok=True)
+    return path
 
 
-def review_stroke_predictions(hsqm):
+def review_training_candidates(hsqm, model_name, *, checkpoint='', training_root='', seed=42,
+                               threshold=.5, global_alignment=True):
     import ipywidgets as widgets
     from IPython.display import display
+    import torch
 
-    root = Path(hsqm)
-    path = root / SELECTION_PATH
-    candidates = {item['prediction']: item for item in find_predictions(root)}
-    if not candidates:
-        print('Drive에 저장된 추출 결과가 없습니다. 먼저 2번 셀에서 결과를 저장하세요.')
-        return
-    saved = _load_selection(path)
-    checked = set(saved)
-    dropdown = widgets.Dropdown(options=[
-        (' · '.join(text for text in (item['source'], item['model'], Path(key).parent.name) if text), key)
-        for key, item in candidates.items()], description='추출 결과', layout=widgets.Layout(width='95%'))
-    selected = widgets.Checkbox(description='학습 후보로 선택', indent=False)
-    previous = widgets.Button(description='이전')
-    following = widgets.Button(description='다음')
-    save = widgets.Button(description='선택 목록 저장', button_style='primary')
+    from .convert_reference_csv import existing_path
+    from .infer_topology import load_topology, preview_topology, save_topology_prediction
+    from .npz_dataset import prepare_npz_dataset
+    from .stroke_demo import _select_checkpoint
+
+    root = existing_path(hsqm)
+    destination = root / 'dataset' / OUTPUT_FOLDER
+    checkpoint, expected_mode = _select_checkpoint(root, model_name, checkpoint)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model, size, epoch = load_topology(checkpoint, device)
+    if model.output_mode != expected_mode:
+        raise ValueError('선택한 모델과 체크포인트의 종류가 다릅니다.')
+    source = training_root or root / 'dataset' / 'automated_train_dataset'
+    print(f'{model_name} · epoch {epoch} · {device} | 학습 NPZ 준비 중', flush=True)
+    manifest = prepare_npz_dataset(source, size=size, seed=seed)
+    groups = index_training_rows(json.loads(manifest.read_text(encoding='utf-8')))
+    if not groups:
+        raise ValueError('학습 분할에서 I_<폰트>_<글자>_<번호>.png 이름의 샘플을 찾지 못했습니다.')
+
+    glyphs_by_font = defaultdict(list)
+    for font_name, character in sorted(groups):
+        glyphs_by_font[font_name].append(character)
+    font = widgets.Dropdown(options=list(glyphs_by_font), description='폰트')
+    glyph = widgets.Dropdown(description='글자')
+    run = widgets.Button(description='Target 추출', button_style='info')
+    fallback = widgets.Button(description='학습 샘플 보기', disabled=True)
+    confirm = widgets.Button(description='확인 · NPZ 저장', button_style='success', disabled=True)
     status = widgets.HTML()
     preview = widgets.VBox()
-    keys = list(candidates)
+    displayed = None
+    remaining = []
 
-    def show_candidate(_=None):
-        key = dropdown.value
-        item = candidates[key]
-        index = keys.index(key)
-        previous.disabled = index == 0
-        following.disabled = index == len(keys) - 1
-        selected.value = key in checked
-        details = f"{index + 1}/{len(keys)} · {item['source']} · {item['input_mode']}"
-        panels = [widgets.HTML(value=html.escape(details))]
-        prediction = root / key
-        for suffix in ('overview', 'strokes'):
-            image = prediction.with_name(f'{prediction.stem}_{suffix}.png')
-            if image.is_file():
-                panels.append(widgets.Image(value=image.read_bytes(), format='png',
-                                            layout=widgets.Layout(width='100%')))
-        if len(panels) == 1:
-            panels.append(widgets.HTML(value='저장된 미리보기가 없습니다.'))
-        preview.children = panels
+    def message(text):
+        status.value = html.escape(str(text))
 
-    def update_checked(change):
-        if change['new']:
-            checked.add(dropdown.value)
-        else:
-            checked.discard(dropdown.value)
-        status.value = f'선택 {len(checked)}개 · 저장된 선택 {len(saved)}개'
+    def reset(_=None):
+        nonlocal displayed
+        displayed = None
+        fallback.disabled = confirm.disabled = True
+        preview.children = ()
+        message('폰트와 글자를 고른 뒤 Target 추출을 누르세요.')
 
-    def save_checked(_):
-        nonlocal saved
-        added = {key: candidates[key] for key in checked - saved.keys()}
+    def update_glyphs(_=None):
+        glyph.options = glyphs_by_font[font.value]
+        reset()
+
+    def show(prefix):
+        preview.children = tuple(widgets.Image(
+            value=prefix.with_name(f'{prefix.name}_{suffix}.png').read_bytes(), format='png',
+            layout=widgets.Layout(width='100%')) for suffix in ('overview', 'strokes'))
+
+    def show_target(_):
+        nonlocal displayed, remaining
+        reset()
+        message('Target에 모델을 실행 중입니다.')
+        rows = groups[font.value, glyph.value]
+        row = rows[0]
         try:
-            saved = _save_selection(path, added, saved.keys() - checked)
-        except OSError as error:
-            status.value = html.escape(f'저장 실패: {error}')
+            baseline = _read_npz(row['path'])
+            reference, strokes = (torch.from_numpy(baseline[key]).float() for key in ('reference', 'strokes'))
+            with TemporaryDirectory() as temp:
+                prefix = Path(temp) / 'target'
+                summary = save_topology_prediction(model, device, reference, reference, strokes, prefix,
+                                                   'Target prediction', threshold=threshold, show=False,
+                                                   global_alignment=global_alignment)
+                prediction = _read_npz(summary['npz'])
+                show(prefix)
+        except (OSError, ValueError, RuntimeError) as error:
+            message(f'Target 추출 실패: {error}')
             return
-        checked.clear()
-        checked.update(saved)
-        selected.value = dropdown.value in checked
-        status.value = f'{len(saved)}개 저장 · {html.escape(str(path))}'
+        remaining = random.sample(rows, len(rows))
+        displayed = (row, prediction)
+        fallback.disabled = False
+        confirm.disabled = not prediction['hard_masks'].any()
+        message(f'{font.value} · {glyph.value} · Target 모델 결과')
 
-    dropdown.observe(show_candidate, names='value')
-    selected.observe(update_checked, names='value')
-    previous.on_click(lambda _: setattr(dropdown, 'index', dropdown.index - 1))
-    following.on_click(lambda _: setattr(dropdown, 'index', dropdown.index + 1))
-    save.on_click(save_checked)
-    show_candidate()
-    status.value = f'선택 {len(checked)}개'
-    display(widgets.VBox([dropdown, widgets.HBox([previous, following, selected, save]), status, preview]))
+    def show_fallback(_):
+        nonlocal displayed
+        row = remaining.pop()
+        fallback.disabled = not remaining
+        try:
+            sample = _read_npz(row['path'])
+            masks = sample['target_masks']
+            with TemporaryDirectory() as temp:
+                prefix = Path(temp) / 'training'
+                preview_topology(sample['image'], sample['reference'], sample['strokes'], masks, masks,
+                                 prefix, 'Training sample annotations', .5, False)
+                show(prefix)
+        except (OSError, ValueError, KeyError) as error:
+            message(f'학습 샘플 읽기 실패: {error}')
+            return
+        displayed = (row, None)
+        confirm.disabled = False
+        message(f"학습 샘플의 기존 정답 · {row['source_image']} · 남은 후보 {len(remaining)}개")
+
+    def save_displayed(_):
+        row, prediction = displayed
+        try:
+            path = publish_reviewed_sample(destination, prediction=prediction, training_row=row)
+        except (OSError, ValueError) as error:
+            message(f'저장 실패: {error}')
+            return
+        confirm.disabled = True
+        message(f"저장 완료 · {path}")
+
+    font.observe(update_glyphs, names='value')
+    glyph.observe(reset, names='value')
+    run.on_click(show_target)
+    fallback.on_click(show_fallback)
+    confirm.on_click(save_displayed)
+    update_glyphs()
+    display(widgets.VBox([widgets.HBox([font, glyph]), widgets.HBox([run, fallback, confirm]), status, preview]))
