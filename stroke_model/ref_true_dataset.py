@@ -27,6 +27,8 @@ def discover_glyphs(root):
     root = Path(root)
     groups = defaultdict(list)
     for path in sorted(root.glob('*/*.json')):
+        if not path.is_file():
+            continue
         font = unicodedata.normalize('NFC', path.parent.name)
         stem = unicodedata.normalize('NFC', path.stem)
         if not re.fullmatch(r'I_.+_\d+', stem):
@@ -67,6 +69,32 @@ def save_review(path, font, glyph, file, digest, approved):
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def copy_approved_json(root, approved_root, file, digest):
+    """Keep a verified snapshot of the JSON the user saw."""
+    source, destination = Path(root)/file, Path(approved_root)/file
+    if destination.is_file():
+        return destination
+    raw = source.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError('JSON이 바뀌었습니다. 다시 열어서 확인하세요.')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f'.{uuid4().hex}.partial')
+    try:
+        temporary.write_bytes(raw)
+        if not destination.is_file():
+            temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return destination
+
+
+def remove_rejected_json(root, file, digest):
+    source = Path(root)/file
+    if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
+        raise ValueError('JSON이 바뀌었습니다. 다시 열어서 확인하세요.')
+    source.unlink()
 
 
 def _rasterize(strokes, width):
@@ -150,7 +178,7 @@ def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, scale_
                             sample_metadata=np.asarray(json.dumps(metadata, ensure_ascii=False)))
 
 
-def generate_approved(root, review_path, destination, *, size=128, width=7., scale_range=(.85, 1.15),
+def generate_approved(root, review_path, destination, *, approved_root=None, size=128, width=7., scale_range=(.85, 1.15),
                       aspect_range=(.8, 1.25), rotation=12., seed=42, max_bytes=256 * 2**20):
     """Publish one reusable snapshot containing exactly the current approvals."""
     if size < 16 or width <= 0 or width >= size / 2 or rotation < 0:
@@ -160,9 +188,16 @@ def generate_approved(root, review_path, destination, *, size=128, width=7., sca
     root, destination = Path(root), Path(destination)
     groups = discover_glyphs(root)
     approved, stale = {}, []
+    if approved_root is not None:
+        approved_root = Path(approved_root)
+        for (font, glyph), files in sorted(discover_glyphs(approved_root).items()):
+            try:
+                approved[font, glyph] = read_coordinates(approved_root/files[0])
+            except (OSError, ValueError) as error:
+                stale.append(f'{font}/{glyph}: {error}')
     for font, review in sorted(load_review(review_path).items()):
         for glyph, record in sorted(review.items()):
-            if not record['approved']:
+            if not record['approved'] or (font, glyph) in approved:
                 continue
             file = record['file']
             try:
@@ -228,14 +263,21 @@ def _preview(coordinates, width, size):
     return stream.getvalue()
 
 
-def review_coordinates(root, review_path, *, width=7., size=128):
+def review_coordinates(root, review_path, *, approved_root, width=7., size=128):
     import ipywidgets as widgets
     from IPython.display import display
 
-    root = Path(root)
+    root, approved_root = Path(root), Path(approved_root)
+    if root.resolve() == approved_root.resolve():
+        raise ValueError('원본과 통과 JSON 폴더는 달라야 합니다.')
     groups = discover_glyphs(root)
+    archive = discover_glyphs(approved_root)
+    done = {key for key, files in groups.items()
+            if {unicodedata.normalize('NFC', file) for file in files}.intersection(
+                unicodedata.normalize('NFC', file) for file in archive.get(key, ()))}
+    groups = {key: files for key, files in groups.items() if key not in done}
     if not groups:
-        print(f'원본 글자 JSON이 없습니다: {root}')
+        print(f'검수할 JSON이 없습니다. 통과 폴더에서 확인된 글자: {len(done)}개')
         return
     by_font = defaultdict(list)
     for font_name, character in sorted(groups):
@@ -244,9 +286,8 @@ def review_coordinates(root, review_path, *, width=7., size=128):
     glyph = widgets.Dropdown(description='글자')
     files = widgets.Dropdown(description='JSON')
     previous = widgets.Button(description='이전 글자')
-    following = widgets.Button(description='다음 글자')
-    approve = widgets.Button(description='통과', button_style='success')
-    reject = widgets.Button(description='제외')
+    approve = widgets.Button(description='통과 · 다음', button_style='success')
+    reject = widgets.Button(description='제외 · 원본 삭제', button_style='danger')
     status = widgets.HTML()
     preview = widgets.Image(format='png', layout=widgets.Layout(width='100%'))
     digest = None
@@ -255,26 +296,27 @@ def review_coordinates(root, review_path, *, width=7., size=128):
         nonlocal digest
         digest = None
         previous.disabled = glyph.index in (None, 0)
-        following.disabled = glyph.index is None or glyph.index + 1 >= len(glyph.options)
         approve.disabled = reject.disabled = True
         preview.value = b''
         if not files.value:
             return
-        record = load_review(review_path).get(font.value, {}).get(glyph.value)
+        source = root/files.value
         try:
-            coordinates, digest = read_coordinates(root/files.value)
+            coordinates, digest = read_coordinates(source)
             preview.value = _preview(coordinates, width, size)
-        except (OSError, ValueError) as error:
+        except ValueError as error:
+            try:
+                digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            except OSError:
+                pass
+            reject.disabled = digest is None
+            status.value = html.escape(f'검수 불가: {error}')
+            return
+        except OSError as error:
             status.value = html.escape(f'검수 불가: {error}')
             return
         approve.disabled = reject.disabled = False
-        state = '미검수'
-        if record:
-            if record['file'] == files.value and record['sha256'] == digest:
-                state = '통과' if record['approved'] else '제외'
-            else:
-                state = '다른 JSON을 검수했거나 좌표가 변경됨'
-        status.value = html.escape(f'{font.value} / {glyph.value} · {len(coordinates)}획 · {state}')
+        status.value = html.escape(f'{font.value} / {glyph.value} · {len(coordinates)}획 · 기본 통과')
 
     def update_files(_=None):
         if glyph.value not in by_font[font.value]:
@@ -300,22 +342,48 @@ def review_coordinates(root, review_path, *, width=7., size=128):
         update_files()
 
     def mark(approved):
-        if digest is None:
+        if digest is None or not files.value:
             return
+        key = font.value, glyph.value
+        file = files.value
         try:
-            save_review(review_path, font.value, glyph.value, files.value, digest, approved)
-        except OSError as error:
-            status.value = html.escape(f'검수 기록 저장 실패: {error}')
+            if approved:
+                copy_approved_json(root, approved_root, file, digest)
+            else:
+                remove_rejected_json(root, file, digest)
+        except (OSError, ValueError) as error:
+            status.value = html.escape(f'검수 처리 실패: {error}')
             return
-        show()
+        if not approved:
+            groups[key] = [alias for alias in groups[key] if alias != file and (root/alias).is_file()]
+            if groups[key]:
+                update_files()
+                return
+        index = glyph.index
+        by_font[font.value].remove(glyph.value)
+        if by_font[font.value]:
+            glyph.unobserve(update_files, names='value')
+            try:
+                glyph.options = by_font[font.value]
+                glyph.index = min(index, len(glyph.options) - 1)
+            finally:
+                glyph.observe(update_files, names='value')
+            update_files()
+            return
+        del by_font[font.value]
+        if by_font:
+            font.options = list(by_font)
+            return
+        font.disabled = glyph.disabled = files.disabled = previous.disabled = approve.disabled = reject.disabled = True
+        preview.value = b''
+        status.value = '검수를 마쳤습니다. 생성 셀을 실행하세요.'
 
     font.observe(update_glyphs, names='value')
     glyph.observe(update_files, names='value')
     files.observe(show, names='value')
     previous.on_click(lambda _: setattr(glyph, 'index', glyph.index - 1))
-    following.on_click(lambda _: setattr(glyph, 'index', glyph.index + 1))
     approve.on_click(lambda _: mark(True))
     reject.on_click(lambda _: mark(False))
     update_glyphs()
     display(widgets.VBox([widgets.HBox([font, glyph]), files,
-                          widgets.HBox([previous, following, approve, reject]), status, preview]))
+                          widgets.HBox([previous, approve, reject]), status, preview]))

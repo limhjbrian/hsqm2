@@ -12,7 +12,8 @@ def main():
     intro = '''# JSON 검수 및 획 데이터 생성
 
 1. Drive를 연결합니다. 원본 좌표는 `HSQM/dataset/automated_train_dataset/jsons/<폰트>/`에서 가져옵니다.
-2. 폰트와 글자를 골라 좌표, 획 순서, 굵은 합성 이미지와 개별 획을 확인합니다. **통과**를 누르면 현재 JSON의 검수 기록이 Drive에 바로 저장됩니다. 같은 글자에 원본과 편집본이 함께 있으면 JSON 드롭다운에서 선택할 수 있습니다. **제외**를 누르거나 검수 이후 JSON이 수정되면 다음 생성에 포함되지 않습니다.
+2. 폰트와 글자를 골라 획을 확인합니다. 기본 동작인 **통과 · 다음**을 누르면 그 JSON을 `ref is true/approved_jsons/<폰트>/`에 복사하고 다음 글자로 넘어갑니다. 같은 폰트의 동명 JSON이 통과 폴더에 있으면 그 사본을 쓰고 검수 화면에서 건너뜁니다.
+   - **제외 · 원본 삭제**를 누르면 현재 선택한 JSON을 원본 폴더에서 바로 삭제합니다. 같은 글자의 다른 JSON이 남아 있으면 이어서 확인할 수 있습니다.
 3. 생성 셀을 실행합니다. 통과한 폰트·글자마다 가로세로 비율, 전체 크기, 회전을 무작위로 조합해 10장을 만듭니다. 변형 전 얇은 좌표 마스크를 기준 획으로 쓰고, 변형한 굵은 획을 합쳐 입력을 만들며, 합치기 전 획을 정답으로 저장합니다.
 
 출력은 `HSQM/dataset/ref is true/snapshot-…/npz/samples-*.tar`입니다. 학습 노트북의 `DATA_ROOT`에는 생성 셀이 출력한 `snapshot-…` 폴더를 지정하세요. 검수 결과나 설정이 바뀌면 새 폴더에 저장하며, 기존 출력은 보존합니다.
@@ -40,6 +41,7 @@ from stroke_model.ref_true_dataset import generate_approved, review_coordinates
 dataset = existing_path('/content/drive/Shareddrives/2026 자율연구/HSQM/dataset')
 json_root = existing_path(dataset/'automated_train_dataset'/'jsons')
 destination = dataset/'ref is true'
+approved_root = destination/'approved_jsons'
 review_path = destination/'json_review.json'
 '''
     review = '''# @title 2. JSON 검수
@@ -48,7 +50,7 @@ THICKNESS_PX = 7.0 # @param {type:"number"}
 
 from google.colab import output
 output.enable_custom_widget_manager()
-review_coordinates(json_root, review_path, size=IMAGE_SIZE, width=THICKNESS_PX)
+review_coordinates(json_root, review_path, approved_root=approved_root, size=IMAGE_SIZE, width=THICKNESS_PX)
 '''
     generate = '''# @title 3. 통과한 JSON만 변형하고 NPZ TAR 저장
 SCALE_MIN = 0.85 # @param {type:"number"}
@@ -59,7 +61,8 @@ ROTATION_DEG = 12.0 # @param {type:"number"}
 SEED = 42 # @param {type:"integer"}
 MAX_TAR_MIB = 256 # @param {type:"integer"}
 
-result = generate_approved(json_root, review_path, destination, size=IMAGE_SIZE, width=THICKNESS_PX,
+result = generate_approved(json_root, review_path, destination, approved_root=approved_root,
+                           size=IMAGE_SIZE, width=THICKNESS_PX,
                            scale_range=(SCALE_MIN, SCALE_MAX), aspect_range=(ASPECT_MIN, ASPECT_MAX),
                            rotation=ROTATION_DEG, seed=SEED, max_bytes=MAX_TAR_MIB * 2**20)
 for item in result['stale']:

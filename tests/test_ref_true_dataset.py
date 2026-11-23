@@ -6,7 +6,8 @@ import unittest
 import numpy as np
 
 from stroke_model.npz_dataset import prepare_npz_dataset
-from stroke_model.ref_true_dataset import discover_glyphs, generate_approved, read_coordinates, save_review
+from stroke_model.ref_true_dataset import (copy_approved_json, discover_glyphs, generate_approved,
+                                           read_coordinates, remove_rejected_json, save_review)
 from stroke_model.train_reference import StrokeDataset
 
 
@@ -18,6 +19,41 @@ def write_glyph(path, shift=0):
 
 
 class RefTrueDatasetTests(unittest.TestCase):
+    def test_approved_copy_is_used_and_rejected_source_is_deleted_without_copy(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            source, destination = base/'jsons', base/'ref is true'
+            archive, review = destination/'approved_jsons', destination/'json_review.json'
+            accepted, rejected = 'A/초.json', 'A/가.json'
+            write_glyph(source/accepted)
+            write_glyph(source/rejected)
+            _, digest = read_coordinates(source/accepted)
+            copy = copy_approved_json(source, archive, accepted, digest)
+            self.assertEqual(copy.read_bytes(), (source/accepted).read_bytes())
+            write_glyph(source/accepted, 5)
+            self.assertEqual(copy_approved_json(source, archive, accepted, digest), copy)
+            self.assertEqual(read_coordinates(copy)[1], digest)
+
+            _, rejected_digest = read_coordinates(source/rejected)
+            write_glyph(source/rejected, 3)
+            with self.assertRaises(ValueError):
+                remove_rejected_json(source, rejected, rejected_digest)
+            self.assertTrue((source/rejected).exists())
+            _, rejected_digest = read_coordinates(source/rejected)
+            remove_rejected_json(source, rejected, rejected_digest)
+            self.assertFalse((source/rejected).exists())
+            self.assertFalse((archive/rejected).exists())
+
+            result = generate_approved(source, review, destination, approved_root=archive, size=64)
+            self.assertEqual(result['samples'], 10)
+            manifest = prepare_npz_dataset(result['dataset'], local_root=base/'cache', size=64, split='test')
+            rows = json.loads(manifest.read_text(encoding='utf-8'))
+            for row in rows:
+                self.assertEqual(row['char_id'], '초')
+                with np.load(row['path'], allow_pickle=False) as sample:
+                    metadata = json.loads(sample['sample_metadata'].item())
+                self.assertEqual(metadata['coordinates_sha256'], digest)
+
     def test_exact_approvals_produce_ten_samples_per_font_glyph(self):
         with TemporaryDirectory() as directory:
             base = Path(directory)
