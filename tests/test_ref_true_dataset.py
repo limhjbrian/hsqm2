@@ -1,0 +1,68 @@
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
+import numpy as np
+
+from stroke_model.npz_dataset import prepare_npz_dataset
+from stroke_model.ref_true_dataset import discover_glyphs, generate_approved, read_coordinates, save_review
+from stroke_model.train_reference import StrokeDataset
+
+
+def write_glyph(path, shift=0):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    points = [[(54, 118), (170, 118)], [(110, 50), (110, 124)], [(155, 155)]]
+    path.write_text(json.dumps({'strokes': [[dict(x=x+shift, y=y) for x, y in stroke] for stroke in points]}),
+                    encoding='utf-8')
+
+
+class RefTrueDatasetTests(unittest.TestCase):
+    def test_exact_approvals_produce_ten_samples_per_font_glyph(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            source, destination = base/'jsons', base/'ref is true'
+            review = destination/'json_review.json'
+            for filename, shift in [('A/초.json', 0), ('A/A_초.json', 4), ('B/초.json', 7),
+                                    ('A/가.json', 12), ('A/너.json', 15), ('A/I_초_1.json', 20)]:
+                write_glyph(source/filename, shift)
+            groups = discover_glyphs(source)
+            self.assertEqual(groups['A', '초'], ['A/A_초.json', 'A/초.json'])
+            self.assertNotIn(('A', 'I_초_1'), groups)
+            self.assertIsNone(generate_approved(source, review, destination)['dataset'])
+
+            for font, glyph, file, approved in [('A', '초', 'A/A_초.json', True), ('B', '초', 'B/초.json', True),
+                                                ('A', '가', 'A/가.json', True), ('A', '너', 'A/너.json', False)]:
+                _, digest = read_coordinates(source/file)
+                save_review(review, font, glyph, file, digest, approved)
+            write_glyph(source/'A/가.json', 18)
+            result = generate_approved(source, review, destination, size=64)
+            self.assertEqual((result['glyphs'], result['samples']), (2, 20))
+            self.assertEqual(len(result['stale']), 1)
+            self.assertEqual(generate_approved(source, review, destination, size=64), result)
+
+            manifest = prepare_npz_dataset(result['dataset'], local_root=base/'cache', size=64)
+            rows = json.loads(manifest.read_text(encoding='utf-8'))
+            dataset = StrokeDataset(rows, size=64, include_topology=True, allow_overlap=True)
+            self.assertEqual(len(dataset), 20)
+            self.assertEqual({row['char_id'] for row in rows}, {'초'})
+            by_font = {}
+            for index, row in enumerate(rows):
+                image, reference, strokes, labels, target, valid = dataset[index]
+                self.assertTrue((target.any(dim=0) == (image[0] > .5)).all())
+                self.assertTrue((labels[target.sum(0) > 1] == -1).all())
+                self.assertTrue((target.sum((-2, -1)) > (strokes > .5).sum((-2, -1))).all())
+                self.assertTrue(valid.all())
+                with np.load(row['path'], allow_pickle=False) as sample:
+                    metadata = json.loads(sample['sample_metadata'].item())
+                by_font.setdefault(metadata['font'], []).append(metadata['augmentation'])
+            for settings in by_font.values():
+                self.assertEqual(len(settings), 10)
+                self.assertEqual(len({item['aspect'] for item in settings}), 10)
+                self.assertTrue(all(item['scale_x'] != item['scale_y'] for item in settings))
+
+            _, digest = read_coordinates(source/'B/초.json')
+            save_review(review, 'B', '초', 'B/초.json', digest, False)
+            updated = generate_approved(source, review, destination, size=64)
+            self.assertEqual(updated['samples'], 10)
+            self.assertNotEqual(updated['dataset'], result['dataset'])
