@@ -1,4 +1,4 @@
-"""Use a V2 or overlap checkpoint on one dataset image or drawing."""
+"""Use a V2 or overlap checkpoint on selected dataset images or a drawing."""
 
 from datetime import datetime
 import hashlib
@@ -43,6 +43,17 @@ def _image_index(frame, column, name, number):
     if not 1 <= number <= len(frame):
         raise ValueError(f'테스트 이미지 번호는 1~{len(frame)} 중에서 골라 주세요.')
     return number - 1
+
+
+def _image_indices(frame, column, names, number):
+    if isinstance(names, list):
+        if not names or any(not isinstance(name, str) or not name.strip() for name in names):
+            raise ValueError('TEST_IMAGE_NAME 리스트에는 비어 있지 않은 파일명을 넣어 주세요.')
+        # Resolve every entry before inference, retaining order and repetitions.
+        return [_image_index(frame, column, name, number) for name in names]
+    if not isinstance(names, str):
+        raise ValueError('TEST_IMAGE_NAME은 파일명 문자열 또는 파일명 리스트여야 합니다.')
+    return [_image_index(frame, column, names, number)]
 
 
 def _npz_tensors(path, *keys):
@@ -98,10 +109,7 @@ def run_stroke_demo(hsqm, model_name, input_mode, *, checkpoint=None, dataset_ro
             source = row['source_image']
         else:
             frame = pd.DataFrame(rows)
-            index = _image_index(frame, 'source_image', test_image_name, test_image_number)
-            row = rows[index]
-            image, reference, strokes = _npz_tensors(row['path'], 'image', 'reference', 'strokes')
-            source = row['source_image']
+            indices = _image_indices(frame, 'source_image', test_image_name, test_image_number)
     else:
         if not csv_path:
             csv_path = next((dataset / name for name in ('path (1).csv', 'path.csv', 'paths.csv')
@@ -118,22 +126,40 @@ def run_stroke_demo(hsqm, model_name, input_mode, *, checkpoint=None, dataset_ro
             reference, strokes = load_canvas_reference(row, columns, resolve, size)
             source = str(row[columns['reference']])
         else:
-            index = _image_index(frame, columns['image'], test_image_name, test_image_number)
-            image, reference, strokes, path, _ = load_inference_row(frame.iloc[index], columns, resolve, size)
-            source = path.name
+            indices = _image_indices(frame, columns['image'], test_image_name, test_image_number)
 
     destination = Path(save_dir) if save_dir else checkpoint.parent / ('stroke_demo_' + datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
     destination.mkdir(parents=True, exist_ok=False)
-    if is_canvas:
-        image = save_canvas_input(answer, destination / 'input.png', size)
     model_title = 'V2' if expected == 'partition' else 'Overlap'
-    input_title = 'Canvas' if is_canvas else f'Test image {index + 1}'
-    prediction = save_topology_prediction(model, device, image, reference, strokes,
-                  destination / 'prediction', f'{model_title} | {input_title}', threshold=threshold,
-                  show=show, global_alignment=global_alignment)
-    report = dict(model=model_name, input_mode=input_mode, checkpoint=str(checkpoint), checkpoint_epoch=epoch,
-                  output_mode=expected, global_alignment=global_alignment, source=source,
-                  dataset_format='npz' if use_npz else 'csv', **prediction)
+    batch = not is_canvas and isinstance(test_image_name, list)
+    results = []
+    for ordinal, index in enumerate([None] if is_canvas else indices, 1):
+        sample_dir = destination / f'image_{ordinal:04d}' if batch else destination
+        sample_dir.mkdir(exist_ok=True)
+        if is_canvas:
+            image = save_canvas_input(answer, sample_dir / 'input.png', size)
+        elif use_npz:
+            row = rows[index]
+            image, reference, strokes = _npz_tensors(row['path'], 'image', 'reference', 'strokes')
+            source = row['source_image']
+        else:
+            image, reference, strokes, path, _ = load_inference_row(frame.iloc[index], columns, resolve, size)
+            source = path.name
+        input_title = 'Canvas' if is_canvas else f'Test image {index + 1}: {source}'
+        print(f'[{ordinal}/{1 if is_canvas else len(indices)}] {input_title}', flush=True)
+        prediction = save_topology_prediction(model, device, image, reference, strokes,
+                      sample_dir / 'prediction', f'{model_title} | {input_title}', threshold=threshold,
+                      show=show, global_alignment=global_alignment)
+        result = dict(model=model_name, input_mode=input_mode, checkpoint=str(checkpoint), checkpoint_epoch=epoch,
+                      output_mode=expected, global_alignment=global_alignment, source=source,
+                      dataset_format='npz' if use_npz else 'csv', **prediction)
+        if batch:
+            result['test_image_number'] = index + 1
+            (sample_dir / 'inference.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        results.append(result)
+    report = (dict(model=model_name, input_mode=input_mode, checkpoint=str(checkpoint), checkpoint_epoch=epoch,
+                   output_mode=expected, global_alignment=global_alignment, dataset_format='npz' if use_npz else 'csv',
+                   count=len(results), results=results) if batch else results[0])
     (destination / 'inference.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print('저장:', destination, flush=True)
     return report

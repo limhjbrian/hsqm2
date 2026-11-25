@@ -10,11 +10,12 @@ from unittest.mock import patch
 import matplotlib
 matplotlib.use('Agg')
 import numpy as np
+import pandas as pd
 from PIL import Image
 import torch
 
 from stroke_model.npz_dataset import publish_npz_shards
-from stroke_model.stroke_demo import run_stroke_demo
+from stroke_model.stroke_demo import run_stroke_demo, _image_indices
 
 
 class DemoFixture(torch.nn.Module):
@@ -29,6 +30,18 @@ class DemoFixture(torch.nn.Module):
 
 
 class StrokeDemoTests(unittest.TestCase):
+    def test_name_list_resolves_all_entries_and_rejects_invalid_names(self):
+        frame = pd.DataFrame({'input': ['a/first.png', 'second.png', 'b/first.png']})
+        self.assertEqual(_image_indices(frame, 'input', ['second.png', 'a/first.png', 'second.png'], 1), [1, 0, 1])
+        self.assertEqual(_image_indices(frame, 'input', '', 2), [1])
+        self.assertEqual(_image_indices(frame, 'input', 'second.png', 1), [1])
+        for names in ([], [''], ['second.png', None], 3):
+            with self.assertRaises(ValueError):
+                _image_indices(frame, 'input', names, 1)
+        for names in (['second.png', 'missing.png'], ['first.png']):
+            with self.assertRaises(ValueError):
+                _image_indices(frame, 'input', names, 1)
+
     def test_npz_image_and_canvas_use_selected_checkpoint_modes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -60,7 +73,7 @@ class StrokeDemoTests(unittest.TestCase):
                 mode = next(key for key, value in models.items() if value == path)
                 return DemoFixture(mode), 16, 3
 
-            with patch('stroke_model.stroke_demo.load_topology', side_effect=load), \
+            with patch('stroke_model.stroke_demo.load_topology', side_effect=load) as loader, \
                  patch('stroke_model.stroke_demo.canvas_prompt', return_value=answer) as prompt:
                 common = dict(local_root=root/'cache', show=False)
                 report = run_stroke_demo(root, 'V2', '테스트 이미지', test_image_name='I_Font_가_2.png',
@@ -77,6 +90,20 @@ class StrokeDemoTests(unittest.TestCase):
                 with np.load(report['npz']) as result:
                     self.assertEqual(int(result['hard_masks'][:, 8, 8].sum()), 2)
                 self.assertTrue((root/'canvas'/'prediction_overview.png').is_file())
+                # All entries, in supplied order, with independent outputs and one model load.
+                names = ['I_Font_가_2.png', 'I_Font_가_1.png', 'I_Font_가_2.png']
+                before = loader.call_count
+                batch_report = run_stroke_demo(root, 'V2', '테스트 이미지', test_image_name=names,
+                                               save_dir=root/'batch_result', **common)
+                self.assertEqual(loader.call_count, before + 1)
+                self.assertEqual(batch_report['count'], 3)
+                self.assertEqual([r['source'] for r in batch_report['results']], names)
+                self.assertEqual(len({r['npz'] for r in batch_report['results']}), 3)
+                for result in batch_report['results']:
+                    self.assertTrue(Path(result['npz']).is_file())
+                    self.assertTrue((Path(result['npz']).parent/'prediction_overview.png').is_file())
+                saved = json.loads((root/'batch_result'/'inference.json').read_text(encoding='utf-8'))
+                self.assertEqual(saved['count'], 3)
                 with self.assertRaisesRegex(ValueError, '모델 종류'):
                     run_stroke_demo(root, 'V2', '직접 쓰기', checkpoint=models['overlap'], **common)
 
@@ -89,3 +116,14 @@ class StrokeDemoTests(unittest.TestCase):
                 report = run_stroke_demo(root, 'V2', '테스트 이미지', csv_path=csv,
                                          save_dir=root/'legacy', **common)
                 self.assertEqual((report['dataset_format'], report['source']), ('csv', 'old.png'))
+                (dataset/'old2.png').write_bytes(stream.getvalue())
+                csv.write_text('input_path,target_path,target_stroke_paths\n'
+                               'old.png,reference.png,reference.png\n'
+                               'old2.png,reference.png,reference.png\n', encoding='utf-8')
+                before = loader.call_count
+                batch_report = run_stroke_demo(root, '교차점 중복 허용', '테스트 이미지', csv_path=csv,
+                    test_image_name=['old2.png', 'old.png'], save_dir=root/'legacy_batch', **common)
+                self.assertEqual(loader.call_count, before + 1)
+                self.assertEqual([r['source'] for r in batch_report['results']], ['old2.png', 'old.png'])
+                self.assertEqual(batch_report['dataset_format'], 'csv')
+                self.assertTrue(all(Path(r['npz']).is_file() for r in batch_report['results']))
