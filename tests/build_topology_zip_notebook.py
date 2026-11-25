@@ -119,7 +119,7 @@ for index in range(min(3, len(dataset))):
     for s in range(k):
         axes[0,s+1].imshow(target[s], cmap='gray', vmin=0, vmax=1); axes[0,s+1].set_title(f'Actual GT {s+1}')
         axes[1,s+1].imshow(strokes[s], cmap='gray', vmin=0, vmax=1); axes[1,s+1].set_title(f'Ref stroke {s+1}')
-    axes[0,-1].imshow(target.sum(0), vmin=0, vmax=max(2,k)); axes[0,-1].set_title('GT overlap count')
+    axes[0,-1].imshow((target > .5).sum(0), vmin=0, vmax=max(2,k)); axes[0,-1].set_title('GT overlap count')
     plt.tight_layout(); plt.show()
 '''
     if overlap:
@@ -165,7 +165,8 @@ print('영역 감독 계승:', OWNERSHIP_WEIGHT, AFFINITY_WEIGHT)
 if OWNERSHIP_WEIGHT or AFFINITY_WEIGHT:
     from stroke_model.ownership_refinement import preview_ownership_samples
     preview_ownership_samples(manifest, count=3)
-output = data_root.parents[1]/'v2_topology_runs'/datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f')
+project_root = next((parent.parent for parent in data_root.parents if parent.name == 'dataset'), data_root.parents[1])
+output = project_root/'v2_topology_runs'/datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S_%f')
 output.mkdir(parents=True, exist_ok=False)
 for name in ('conversion_report.json', 'selected_paths.csv', 'selected_samples.json', 'skipped_samples.csv', '.complete.json'):
     if (manifest.parent / name).is_file():
@@ -296,7 +297,8 @@ for index in range(min(5, len(validation))):
     notebook = dict(cells=cells, metadata=dict(colab=dict(name=name),
         accelerator='GPU', kernelspec=dict(display_name='Python 3', language='python', name='python3')),
         nbformat=4, nbformat_minor=5)
-    (ROOT/'notebooks/training'/name).write_text(json.dumps(notebook, ensure_ascii=False, indent=2), encoding='utf-8')
+    (ROOT/'notebooks/training'/name).write_text(json.dumps(notebook, ensure_ascii=False, indent=2)+'\n',
+                                                encoding='utf-8', newline='\n')
 
 
 if __name__ == '__main__':

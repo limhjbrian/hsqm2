@@ -85,9 +85,12 @@ class RefTrueDatasetTests(unittest.TestCase):
             by_font = {}
             for index, row in enumerate(rows):
                 image, reference, strokes, labels, target, valid = dataset[index]
-                self.assertTrue((target.any(dim=0) == (image[0] > .5)).all())
-                self.assertTrue((labels[target.sum(0) > 1] == -1).all())
-                self.assertTrue((target.sum((-2, -1)) > (strokes > .5).sum((-2, -1))).all())
+                self.assertTrue(reference.equal(strokes.amax(dim=0, keepdim=True)))
+                self.assertTrue(image.equal(target.amax(dim=0, keepdim=True)))
+                self.assertTrue(((target > 0) & (target < 1)).any())
+                hard_target = target > .5
+                self.assertTrue((labels[hard_target.sum(0) > 1] == -1).all())
+                self.assertTrue((hard_target.sum((-2, -1)) > (strokes > .5).sum((-2, -1))).all())
                 self.assertTrue(valid.all())
                 with np.load(row['path'], allow_pickle=False) as sample:
                     metadata = json.loads(sample['sample_metadata'].item())

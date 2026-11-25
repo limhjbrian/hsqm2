@@ -19,7 +19,7 @@ from .npz_dataset import publish_npz_shards
 CANVAS = 224
 SUPERSAMPLE = 2
 VARIANTS = 10
-RENDER_VERSION = 1
+RENDER_VERSION = 2
 
 
 def discover_glyphs(root):
@@ -156,9 +156,9 @@ def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, scale_
     rng = np.random.default_rng(int.from_bytes(key[:8], 'big'))
     for index in range(VARIANTS):
         matrix, augmentation = _variant_matrix(rng, bounds, scale_range, aspect_range, rotation)
-        thick = _warp(layers, pad, matrix, size)
-        image = thick.max(0, keepdims=True)
-        target = thick > .5
+        target_masks = _warp(layers, pad, matrix, size)
+        image = target_masks.max(0, keepdims=True)
+        target = target_masks > .5
         if not target.any(axis=(1, 2)).all():
             raise ValueError(f'{font}/{glyph}: 변형 {index + 1}에서 사라진 획이 있습니다. 굵기나 배율을 조정하세요.')
         counts = target.sum(0)
@@ -174,7 +174,7 @@ def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, scale_
                                     overlap_pixels=int((counts > 1).sum()), missing_pixels=0))
         filename = hashlib.sha256(name.encode('utf-8')).hexdigest() + '.npz'
         np.savez_compressed(batch/filename, image=image, reference=reference, strokes=strokes,
-                            target_masks=target.astype(np.float32), labels=labels, valid_pixels=np.ones_like(image),
+                            target_masks=target_masks, labels=labels, valid_pixels=np.ones_like(image),
                             sample_metadata=np.asarray(json.dumps(metadata, ensure_ascii=False)))
 
 
