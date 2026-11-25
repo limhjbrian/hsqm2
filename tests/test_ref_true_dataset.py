@@ -53,11 +53,12 @@ class RefTrueDatasetTests(unittest.TestCase):
                 self.assertEqual(row['char_id'], '초')
                 with np.load(row['path'], allow_pickle=False) as sample:
                     metadata = json.loads(sample['sample_metadata'].item())
-                    np.testing.assert_array_equal(sample['strokes'], sample['target_masks'])
                     np.testing.assert_array_equal(sample['reference'], sample['image'])
-                    # Measure the first, horizontal target stroke away from its ends.
-                    width = int((sample['strokes'][0, :, 23] > .5).sum())
-                    self.assertLessEqual(abs(width - 7), 1)
+                    # Sample the horizontal stroke away from its ends and intersection.
+                    ref_width = int((sample['strokes'][0, :, 23] > .5).sum())
+                    input_width = int((sample['target_masks'][0, :, 23] > .5).sum())
+                    self.assertLessEqual(abs(ref_width - 2.3), 1)
+                    self.assertLessEqual(abs(input_width - 7), 1)
                 self.assertEqual(metadata['coordinates_sha256'], digest)
 
     def test_exact_approvals_produce_ten_samples_per_font_glyph(self):
@@ -91,7 +92,7 @@ class RefTrueDatasetTests(unittest.TestCase):
             by_font = {}
             for index, row in enumerate(rows):
                 image, reference, strokes, labels, target, valid = dataset[index]
-                self.assertTrue(reference.equal(strokes.amax(dim=0, keepdim=True)))
+                self.assertGreater((reference > .5).sum().item(), ((strokes > .5).any(dim=0)).sum().item())
                 self.assertTrue(image.equal(target.amax(dim=0, keepdim=True)))
                 self.assertTrue(((target > 0) & (target < 1)).any())
                 hard_target = target > .5

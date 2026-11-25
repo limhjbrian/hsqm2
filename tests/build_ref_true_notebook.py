@@ -14,9 +14,9 @@ def main():
 1. Drive를 연결합니다. 원본 좌표는 `HSQM/dataset/automated_train_dataset/jsons/<폰트>/`에서 가져옵니다.
 2. 폰트와 글자를 골라 획을 확인합니다. 기본 동작인 **통과 · 다음**을 누르면 그 JSON을 `ref is true/jsons/<폰트>/`에 복사하고 다음 글자로 넘어갑니다. 같은 폰트의 동명 JSON이 통과 폴더에 있으면 그 사본을 쓰고 검수 화면에서 건너뜁니다.
    - **제외 · 원본 삭제**를 누르면 현재 선택한 JSON을 원본 폴더에서 바로 삭제합니다. 같은 글자의 다른 JSON이 남아 있으면 이어서 확인할 수 있습니다.
-3. 마지막 셀에서 통과한 폰트·글자마다 10장을 생성합니다. JSON에서 `THICKNESS_PX` 굵기로 그린 target 획을 합쳐 target을 만들고, 같은 획에 가로세로 비율·크기·회전 변형을 적용해 input stroke와 input을 만듭니다. 이미 검수했다면 1번 셀과 마지막 셀만 실행하세요.
+3. 마지막 셀에서 통과한 폰트·글자마다 10장을 생성합니다. JSON에서 `THICKNESS_PX` 굵기로 그린 획을 합쳐 target을 만들고, 같은 굵은 획에 가로세로 비율·크기·회전 변형을 적용해 input stroke와 input을 만듭니다. ref 획은 변형 전 JSON에서 `REF_STROKE_THICKNESS_PX` 굵기로 따로 그립니다. 이미 검수했다면 1번 셀과 마지막 셀만 실행하세요.
 
-기준 글자와 입력 글자는 각각 해당 획 이미지들의 픽셀별 최댓값으로 정확히 복원됩니다. 개별 획의 회색 경계도 NPZ에 함께 저장합니다.
+input stroke를 픽셀별 최댓값으로 합치면 input이 정확히 복원됩니다. 굵은 무변형 target은 NPZ의 `reference`, 얇은 ref 획은 `strokes`, 학습 정답인 input stroke는 `target_masks`에 저장합니다.
 
 출력은 `HSQM/dataset/ref is true/snapshot-…/npz/samples-*.tar`입니다. 학습 노트북의 `DATA_ROOT`에는 생성 셀이 출력한 `snapshot-…` 폴더를 지정하세요. 검수 결과나 설정이 바뀌면 새 폴더에 저장하며, 기존 출력은 보존합니다.
 '''
@@ -54,6 +54,7 @@ review_coordinates(json_root, review_path, approved_root=approved_root)
     generate = '''# @title 3. 통과한 JSON만 변형하고 NPZ TAR 저장
 IMAGE_SIZE = 128 # @param {type:"integer"}
 THICKNESS_PX = 7.0 # @param {type:"number"}
+REF_STROKE_THICKNESS_PX = 2.3 # @param {type:"number"}
 SCALE_MIN = 0.85 # @param {type:"number"}
 SCALE_MAX = 1.15 # @param {type:"number"}
 ASPECT_MIN = 0.8 # @param {type:"number"}
@@ -63,7 +64,7 @@ SEED = 42 # @param {type:"integer"}
 MAX_TAR_MIB = 256 # @param {type:"integer"}
 
 result = generate_approved(json_root, review_path, destination, approved_root=approved_root,
-                           size=IMAGE_SIZE, width=THICKNESS_PX,
+                           size=IMAGE_SIZE, width=THICKNESS_PX, ref_width=REF_STROKE_THICKNESS_PX,
                            scale_range=(SCALE_MIN, SCALE_MAX), aspect_range=(ASPECT_MIN, ASPECT_MAX),
                            rotation=ROTATION_DEG, seed=SEED, max_bytes=MAX_TAR_MIB * 2**20)
 for item in result['stale']:

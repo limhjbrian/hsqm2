@@ -19,7 +19,7 @@ from .npz_dataset import publish_npz_shards
 CANVAS = 224
 SUPERSAMPLE = 2
 VARIANTS = 10
-RENDER_VERSION = 3
+RENDER_VERSION = 4
 
 
 def discover_glyphs(root):
@@ -139,14 +139,16 @@ def _variant_matrix(rng, bounds, scale_range, aspect_range, rotation):
                               aspect=float(aspect), rotation=float(degrees))
 
 
-def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, scale_range, aspect_range,
+def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, ref_width, scale_range, aspect_range,
                  rotation, seed):
     canvas_width = width * CANVAS / size
     layers, pad = _rasterize(coordinates, canvas_width)
-    strokes = _warp(layers, pad, np.eye(2), size)
+    identity = np.eye(2)
+    reference = _warp(layers, pad, identity, size).max(0, keepdims=True)
+    ref_layers, ref_pad = _rasterize(coordinates, ref_width * CANVAS / size)
+    strokes = _warp(ref_layers, ref_pad, identity, size)
     if not (strokes > .5).any(axis=(1, 2)).all():
         raise ValueError(f'{font}/{glyph}: {size}px 기준 마스크에 사라지는 획이 있습니다.')
-    reference = strokes.max(0, keepdims=True)
     group = 'reference:' + hashlib.sha256(reference.tobytes()).hexdigest()
     points = np.concatenate(coordinates)
     minimum, maximum = points.min(0) - canvas_width / 2, points.max(0) + canvas_width / 2
@@ -177,10 +179,10 @@ def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, scale_
                             sample_metadata=np.asarray(json.dumps(metadata, ensure_ascii=False)))
 
 
-def generate_approved(root, review_path, destination, *, approved_root=None, size=128, width=7., scale_range=(.85, 1.15),
-                      aspect_range=(.8, 1.25), rotation=12., seed=42, max_bytes=256 * 2**20):
+def generate_approved(root, review_path, destination, *, approved_root=None, size=128, width=7., ref_width=2.3,
+                      scale_range=(.85, 1.15), aspect_range=(.8, 1.25), rotation=12., seed=42, max_bytes=256 * 2**20):
     """Publish one reusable snapshot containing exactly the current approvals."""
-    if size < 16 or width <= 0 or width >= size / 2 or rotation < 0:
+    if size < 16 or not 0 < ref_width < width < size / 2 or rotation < 0:
         raise ValueError('해상도, 획 굵기 또는 회전 범위를 확인하세요.')
     if any(not 0 < low <= high for low, high in (scale_range, aspect_range)):
         raise ValueError('크기와 가로세로 비율은 양수 범위여야 합니다.')
@@ -211,7 +213,7 @@ def generate_approved(root, review_path, destination, *, approved_root=None, siz
             approved[font, glyph] = (points, digest)
     if not approved:
         return dict(dataset=None, glyphs=0, samples=0, stale=stale)
-    settings = dict(size=size, width=width, scale_range=scale_range, aspect_range=aspect_range,
+    settings = dict(size=size, width=width, ref_width=ref_width, scale_range=scale_range, aspect_range=aspect_range,
                     rotation=rotation, seed=seed)
     identity = [RENDER_VERSION, VARIANTS, settings, max_bytes,
                 [(font, glyph, digest) for (font, glyph), (_, digest) in approved.items()]]
