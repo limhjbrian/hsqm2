@@ -44,7 +44,8 @@ class RefTrueDatasetTests(unittest.TestCase):
             self.assertFalse((source/rejected).exists())
             self.assertFalse((archive/rejected).exists())
 
-            result = generate_approved(source, review, destination, approved_root=archive, size=64)
+            result = generate_approved(source, review, destination, approved_root=archive, size=64,
+                                       scale_range=(1., 1.), aspect_range=(1., 1.), rotation=0.)
             self.assertEqual(result['samples'], 10)
             manifest = prepare_npz_dataset(result['dataset'], local_root=base/'cache', size=64, split='test')
             rows = json.loads(manifest.read_text(encoding='utf-8'))
@@ -52,6 +53,11 @@ class RefTrueDatasetTests(unittest.TestCase):
                 self.assertEqual(row['char_id'], '초')
                 with np.load(row['path'], allow_pickle=False) as sample:
                     metadata = json.loads(sample['sample_metadata'].item())
+                    np.testing.assert_array_equal(sample['strokes'], sample['target_masks'])
+                    np.testing.assert_array_equal(sample['reference'], sample['image'])
+                    # Measure the first, horizontal target stroke away from its ends.
+                    width = int((sample['strokes'][0, :, 23] > .5).sum())
+                    self.assertLessEqual(abs(width - 7), 1)
                 self.assertEqual(metadata['coordinates_sha256'], digest)
 
     def test_exact_approvals_produce_ten_samples_per_font_glyph(self):
@@ -90,7 +96,6 @@ class RefTrueDatasetTests(unittest.TestCase):
                 self.assertTrue(((target > 0) & (target < 1)).any())
                 hard_target = target > .5
                 self.assertTrue((labels[hard_target.sum(0) > 1] == -1).all())
-                self.assertTrue((hard_target.sum((-2, -1)) > (strokes > .5).sum((-2, -1))).all())
                 self.assertTrue(valid.all())
                 with np.load(row['path'], allow_pickle=False) as sample:
                     metadata = json.loads(sample['sample_metadata'].item())

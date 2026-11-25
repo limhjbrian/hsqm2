@@ -14,7 +14,7 @@ def main():
 1. Drive를 연결합니다. 원본 좌표는 `HSQM/dataset/automated_train_dataset/jsons/<폰트>/`에서 가져옵니다.
 2. 폰트와 글자를 골라 획을 확인합니다. 기본 동작인 **통과 · 다음**을 누르면 그 JSON을 `ref is true/jsons/<폰트>/`에 복사하고 다음 글자로 넘어갑니다. 같은 폰트의 동명 JSON이 통과 폴더에 있으면 그 사본을 쓰고 검수 화면에서 건너뜁니다.
    - **제외 · 원본 삭제**를 누르면 현재 선택한 JSON을 원본 폴더에서 바로 삭제합니다. 같은 글자의 다른 JSON이 남아 있으면 이어서 확인할 수 있습니다.
-3. 생성 셀을 실행합니다. 통과한 폰트·글자마다 가로세로 비율, 전체 크기, 회전을 무작위로 조합해 10장을 만듭니다. 변형 전 얇은 좌표 마스크를 기준 획으로 쓰고, 변형한 굵은 획을 합쳐 입력을 만들며, 합치기 전 획을 정답으로 저장합니다.
+3. 마지막 셀에서 통과한 폰트·글자마다 10장을 생성합니다. JSON에서 `THICKNESS_PX` 굵기로 그린 target 획을 합쳐 target을 만들고, 같은 획에 가로세로 비율·크기·회전 변형을 적용해 input stroke와 input을 만듭니다. 이미 검수했다면 1번 셀과 마지막 셀만 실행하세요.
 
 기준 글자와 입력 글자는 각각 해당 획 이미지들의 픽셀별 최댓값으로 정확히 복원됩니다. 개별 획의 회색 경계도 NPZ에 함께 저장합니다.
 
@@ -47,14 +47,13 @@ approved_root = destination/'jsons'
 review_path = destination/'json_review.json'
 '''
     review = '''# @title 2. JSON 검수
-IMAGE_SIZE = 128 # @param {type:"integer"}
-THICKNESS_PX = 7.0 # @param {type:"number"}
-
 from google.colab import output
 output.enable_custom_widget_manager()
-review_coordinates(json_root, review_path, approved_root=approved_root, size=IMAGE_SIZE, width=THICKNESS_PX)
+review_coordinates(json_root, review_path, approved_root=approved_root)
 '''
     generate = '''# @title 3. 통과한 JSON만 변형하고 NPZ TAR 저장
+IMAGE_SIZE = 128 # @param {type:"integer"}
+THICKNESS_PX = 7.0 # @param {type:"number"}
 SCALE_MIN = 0.85 # @param {type:"number"}
 SCALE_MAX = 1.15 # @param {type:"number"}
 ASPECT_MIN = 0.8 # @param {type:"number"}

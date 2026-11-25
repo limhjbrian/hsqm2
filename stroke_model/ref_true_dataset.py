@@ -19,7 +19,7 @@ from .npz_dataset import publish_npz_shards
 CANVAS = 224
 SUPERSAMPLE = 2
 VARIANTS = 10
-RENDER_VERSION = 2
+RENDER_VERSION = 3
 
 
 def discover_glyphs(root):
@@ -141,14 +141,13 @@ def _variant_matrix(rng, bounds, scale_range, aspect_range, rotation):
 
 def _write_glyph(batch, font, glyph, coordinates, digest, *, size, width, scale_range, aspect_range,
                  rotation, seed):
-    reference_layers, reference_pad = _rasterize(coordinates, 4.)
-    strokes = _warp(reference_layers, reference_pad, np.eye(2), size)
+    canvas_width = width * CANVAS / size
+    layers, pad = _rasterize(coordinates, canvas_width)
+    strokes = _warp(layers, pad, np.eye(2), size)
     if not (strokes > .5).any(axis=(1, 2)).all():
         raise ValueError(f'{font}/{glyph}: {size}px 기준 마스크에 사라지는 획이 있습니다.')
     reference = strokes.max(0, keepdims=True)
     group = 'reference:' + hashlib.sha256(reference.tobytes()).hexdigest()
-    canvas_width = width * CANVAS / size
-    layers, pad = _rasterize(coordinates, canvas_width)
     points = np.concatenate(coordinates)
     minimum, maximum = points.min(0) - canvas_width / 2, points.max(0) + canvas_width / 2
     bounds = np.array([(x, y) for x in (minimum[0], maximum[0]) for y in (minimum[1], maximum[1])])
